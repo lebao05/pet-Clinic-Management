@@ -1,0 +1,26 @@
+@import "tailwindcss";
+
+// tailwind.config.js
+colors: {
+  primary: {
+    50: '#E0F2FE',   // Light cyan background
+    100: '#BAE6FD',
+    500: '#0EA5E9',  // Cyan links
+    600: '#0284C7',
+  },
+  secondary: {
+    500: '#14B8A6',  // Teal (buttons, active states)
+    600: '#0D9488',
+  },
+  warning: {
+    400: '#FBBF24',  // Orange for alerts
+    500: '#F59E0B',
+  },
+  success: '#10B981',
+  gray: {
+    50: '#F9FAFB',
+    100: '#F3F4F6',
+    700: '#374151',
+    900: '#111827',
+  }
+}
