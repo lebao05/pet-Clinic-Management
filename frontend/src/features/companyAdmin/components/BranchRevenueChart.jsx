@@ -1,6 +1,6 @@
 // src/features/companyAdmin/components/BranchRevenueChart.jsx
 import React from "react";
-import Card from "../../../shared/components/ui/Card";
+import {Card} from "../../../shared/components/ui/Card";
 
 const BranchRevenueChart = () => {
   const branches = [

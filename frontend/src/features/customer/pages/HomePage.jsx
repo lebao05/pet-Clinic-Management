@@ -2,7 +2,7 @@
 import React from "react";
 import { Link } from "react-router-dom";
 import Button from "../../../shared/components/ui/Button";
-import Card from "../../../shared/components/ui/Card";
+import {Card} from "../../../shared/components/ui/Card";
 
 const HomePage = () => {
   return (
