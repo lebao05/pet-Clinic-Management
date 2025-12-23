@@ -30,7 +30,7 @@ class UserModel {
                            m.MinSpendPerYear, m.KeepSpendPerYear
                     FROM Users u
                     LEFT JOIN Membership m ON u.RankID = m.RankID
-                    WHERE u.UserID = @id AND u.IsActive = 1
+                    WHERE u.UserID  = @id AND u.IsActive = 1
                 `);
       return result.recordset[0];
     } catch (err) {
