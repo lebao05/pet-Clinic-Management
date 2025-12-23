@@ -1,6 +1,6 @@
 // src/features/customer/pages/ProfilePage.jsx
 import React from "react";
-import Card from "../../../shared/components/ui/Card";
+import {Card} from "../../../shared/components/ui/Card";
 import Button from "../../../shared/components/ui/Button";
 
 const ProfilePage = () => {

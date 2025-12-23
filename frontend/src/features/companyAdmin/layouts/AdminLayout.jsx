@@ -7,10 +7,9 @@ import Navbar from "../../../shared/components/layout/Navbar";
 const AdminLayout = () => {
   const menuItems = [
     { icon: "📊", label: "Dashboard", path: "/admin/dashboard" },
-    { icon: "🏢", label: "Branches", path: "/admin/branches" },
-    { icon: "👥", label: "Staff", path: "/admin/staff" },
-    { icon: "📈", label: "Reports", path: "/admin/reports" },
-    { icon: "⚙️", label: "Settings", path: "/admin/settings" },
+    { icon: "🏢", label: "Chi nhánh", path: "/admin/branches" },
+    { icon: "👥", label: "Nhân viên", path: "/admin/staff" },
+    { icon: "⚙️", label: "Cài đặt", path: "/admin/settings" },
   ];
 
   const user = {

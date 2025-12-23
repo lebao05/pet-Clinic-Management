@@ -1,6 +1,6 @@
 // src/features/branchManager/components/StatCard.jsx
 import React from "react";
-import Card from "../../../shared/components/ui/Card";
+import {Card} from "../../../shared/components/ui/Card";
 
 const StatCard = ({ title, value, icon, iconBg, valueColor = "text-neutral-900" }) => {
   return (

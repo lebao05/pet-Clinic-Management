@@ -1,6 +1,6 @@
 // src/features/branchManager/pages/InventoryPage.jsx
 import React, { useState } from "react";
-import Card from "../../../shared/components/ui/Card";
+import {Card} from "../../../shared/components/ui/Card";
 import Button from "../../../shared/components/ui/Button";
 
 const InventoryPage = () => {

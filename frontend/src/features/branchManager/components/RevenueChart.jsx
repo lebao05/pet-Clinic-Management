@@ -1,6 +1,6 @@
 // src/features/branchManager/components/RevenueChart.jsx
 import React from "react";
-import Card from "../../../shared/components/ui/Card";
+import {Card} from "../../../shared/components/ui/Card";
 
 const RevenueChart = () => {
   // Dữ liệu giả cho chart (7 ngày)
