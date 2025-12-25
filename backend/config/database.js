@@ -1,21 +1,13 @@
-// config/database.js
 const sql = require("mssql");
 
 const config = {
-  server: "localhost",
-  database: "PetCareX_Optimized",
-  user: "sa",
-  password: "123456",
+  server: "petcarex.database.windows.net", // Azure SQL server name
+  database: "petcarex",
+  user: "nhan", // Đổi tên user phù hợp
+  password: "Trongnh@n2401", // Lưu ý không commit password thực lên git/public repo!
   options: {
-    encrypt: false,
-    trustServerCertificate: true,
-    enableArithAbort: true,
-    instanceName: "SQLEXPRESS",
-    useUTC: false,
-    // ← Thêm dòng này
-    cryptoCredentialsDetails: {
-      minVersion: "TLSv1",
-    },
+    encrypt: true, // Azure yêu cầu
+    trustServerCertificate: false,
   },
   pool: {
     max: 10,
@@ -31,28 +23,20 @@ let pool;
 async function getConnection() {
   try {
     if (!pool) {
-      console.log("🔄 Đang kết nối SQL Server...");
-      console.log("   Server: localhost");
-      console.log("   Instance: SQLEXPRESS");
-      console.log("   Database: PetCareX_Optimized");
-      console.log("   User: sa");
-      console.log("");
-
       pool = await sql.connect(config);
-
-      // Set UTF-8 encoding
       await pool.request().query("SET TEXTSIZE 2147483647");
-
-      const result = await pool.request().query("SELECT @@SERVERNAME AS ServerName, DB_NAME() AS DB");
-      console.log("✅ KẾT NỐI THÀNH CÔNG!");
-      console.log("   Server thực tế:", result.recordset[0].ServerName);
-      console.log("   Database:", result.recordset[0].DB);
-      console.log("");
     }
     return pool;
   } catch (err) {
-    console.error("❌ LỖI KẾT NỐI DATABASE!");
-    console.error("   Error:", err.message);
+    // Ghi log chi tiết lỗi và gợi ý hướng xử lý
+    if (err.code === "ESOCKET" || err.message.includes("ECONNRESET")) {
+      console.error("❌ Lỗi database: Connection lost - read ECONNRESET.");
+      console.error(
+        "👉 Kiểm tra: Public network access trên Azure SQL, firewall, và trạng thái mạng. Xem chú thích đầu file để biết thêm chi tiết khắc phục."
+      );
+    } else {
+      console.error("❌ Failed to connect to database:", err);
+    }
     throw err;
   }
 }
