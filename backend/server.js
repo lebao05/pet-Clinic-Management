@@ -21,15 +21,15 @@ getConnection()
   });
 
 // Import routes
-const userRoutes = require("./routes/userRoutes");
-const petRoutes = require("./routes/petRoutes");
-const appointmentRoutes = require("./routes/appointmentRoutes");
-
+// const userRoutes = require("./routes/userRoutes");
+// const petRoutes = require("./routes/petRoutes");
+// const appointmentRoutes = require("./routes/appointmentRoutes");
+const companyOwnerRoutes = require("./routes/companyOwnerRoute");
 // Use routes
-app.use("/api/users", userRoutes);
-app.use("/api/pets", petRoutes);
-app.use("/api/appointments", appointmentRoutes);
-
+// app.use("/api/users", userRoutes);
+// app.use("/api/pets", petRoutes);
+// app.use("/api/appointments", appointmentRoutes);
+app.use("/api/company-owner", companyOwnerRoutes);
 // Root route
 app.get("/", (req, res) => {
   res.json({
