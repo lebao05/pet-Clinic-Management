@@ -25,11 +25,14 @@ getConnection()
 // const petRoutes = require("./routes/petRoutes");
 // const appointmentRoutes = require("./routes/appointmentRoutes");
 const companyOwnerRoutes = require("./routes/companyOwnerRoute");
+const branchManagerRoutes = require("./routes/branchManagerRoutes");
+
 // Use routes
 // app.use("/api/users", userRoutes);
 // app.use("/api/pets", petRoutes);
 // app.use("/api/appointments", appointmentRoutes);
 app.use("/api/company-owner", companyOwnerRoutes);
+app.use("/api/branch-manager", branchManagerRoutes);
 // Root route
 app.get("/", (req, res) => {
   res.json({

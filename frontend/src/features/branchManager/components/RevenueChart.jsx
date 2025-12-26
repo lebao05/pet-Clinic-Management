@@ -2,33 +2,29 @@
 import React from "react";
 import {Card} from "../../../shared/components/ui/Card";
 
-const RevenueChart = () => {
-  // Dữ liệu giả cho chart (7 ngày)
-  const data = [
-    { day: "Mon", value: 850 },
-    { day: "Tue", value: 920 },
-    { day: "Wed", value: 780 },
-    { day: "Thu", value: 1100 },
-    { day: "Fri", value: 1250 },
-    { day: "Sat", value: 950 },
-    { day: "Sun", value: 880 },
-  ];
-
-  const maxValue = Math.max(...data.map((d) => d.value));
+const RevenueChart = ({ data = [] }) => {
+  // expected: [{date:'YYYY-MM-DD', amount:number}]
+  const safe = Array.isArray(data) ? data : [];
+  const mapped = safe.map((x) => {
+    const dt = new Date(x.date || Date.now());
+    const label = dt.toLocaleDateString(undefined, { weekday: "short" });
+    return { day: label, value: Number(x.amount || 0) };
+  });
+  const maxValue = Math.max(1, ...mapped.map((d) => d.value));
 
   return (
     <Card>
       <h3 className="text-lg font-bold text-neutral-900 mb-6">Weekly Revenue</h3>
 
       <div className="h-64 bg-neutral-900 rounded-lg p-6 flex items-end justify-around gap-2">
-        {data.map((item, index) => {
+        {mapped.map((item, index) => {
           const height = (item.value / maxValue) * 100;
           return (
             <div key={index} className="flex-1 flex flex-col items-center gap-2">
               <div className="w-full relative group">
                 {/* Tooltip */}
                 <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 bg-neutral-800 text-white px-3 py-1 rounded text-xs opacity-0 group-hover:opacity-100 transition whitespace-nowrap">
-                  ${item.value}
+                  {item.value.toLocaleString(undefined, { maximumFractionDigits: 2 })}
                 </div>
 
                 {/* Bar */}
