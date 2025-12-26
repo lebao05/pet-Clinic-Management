@@ -1,6 +1,16 @@
 import axios from "axios";
 
-const API_URL = import.meta.env.VITE_API_BASE_URL;
+// Vite exposes env variables under import.meta.env. If VITE_API_BASE_URL is missing
+// fall back to a sensible default so the frontend still reaches the backend
+// when env wasn't loaded in the dev environment.
+const API_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:5000/api";
+
+if (!import.meta.env.VITE_API_BASE_URL) {
+    // Helpful during development to indicate why requests might go to the fallback
+    // (the browser console will show this). Keep as a warning, not an exception.
+    // eslint-disable-next-line no-console
+    console.warn("VITE_API_BASE_URL is not set — falling back to http://localhost:5000/api");
+}
 
 const instance = axios.create({
     baseURL: API_URL,

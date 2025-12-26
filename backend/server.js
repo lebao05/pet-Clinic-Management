@@ -25,11 +25,16 @@ getConnection()
 // const petRoutes = require("./routes/petRoutes");
 // const appointmentRoutes = require("./routes/appointmentRoutes");
 const companyOwnerRoutes = require("./routes/companyOwnerRoute");
+// Demo staff portals (simple)
+const doctorRoutes = require("./routes/doctorRoutes");
+const cashierRoutes = require("./routes/cashierRoutes");
 // Use routes
 // app.use("/api/users", userRoutes);
 // app.use("/api/pets", petRoutes);
 // app.use("/api/appointments", appointmentRoutes);
 app.use("/api/company-owner", companyOwnerRoutes);
+app.use("/api/doctor", doctorRoutes);
+app.use("/api/cashier", cashierRoutes);
 // Root route
 app.get("/", (req, res) => {
   res.json({
@@ -39,6 +44,8 @@ app.get("/", (req, res) => {
       users: "/api/users",
       pets: "/api/pets",
       appointments: "/api/appointments",
+      doctor: "/api/doctor",
+      cashier: "/api/cashier",
       health: "/api/health",
     },
   });
