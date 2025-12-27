@@ -2,16 +2,20 @@ import React from "react";
 import { Routes, Route } from "react-router-dom";
 import DoctorLayout from "../features/doctor/layouts/DoctorLayout";
 import DoctorSchedulePage from "../features/doctor/pages/DoctorSchedulePage";
-import AppointmentDetailPage from "../features/doctor/pages/AppointmentDetailPage";
+import DoctorAppointmentDetailPage from "../features/doctor/pages/DoctorAppointmentDetailPage";
+import DoctorVaccineCatalogPage from "../features/doctor/pages/DoctorVaccineCatalogPage";
 
-export default function DoctorRoutes() {
+const DoctorRoutes = () => {
   return (
     <Routes>
       <Route path="/" element={<DoctorLayout />}>
         <Route index element={<DoctorSchedulePage />} />
         <Route path="schedule" element={<DoctorSchedulePage />} />
-        <Route path="appointments/:id" element={<AppointmentDetailPage />} />
+        <Route path="vaccines" element={<DoctorVaccineCatalogPage />} />
+        <Route path="appointments/:id" element={<DoctorAppointmentDetailPage />} />
       </Route>
     </Routes>
   );
-}
+};
+
+export default DoctorRoutes;

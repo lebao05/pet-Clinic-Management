@@ -25,7 +25,7 @@ const getDashboard = async (req, res) => {
         /* 1. Tổng doanh thu */
         SELECT 
           SUM(FinalAmount) AS TotalRevenue
-        FROM Invoice
+        FROM dbo.Invoice
         WHERE InvoiceDate >= @FromDate
           AND PaymentStatus = 'Paid';
 
@@ -33,8 +33,8 @@ const getDashboard = async (req, res) => {
         SELECT
           b.BranchName,
           SUM(i.FinalAmount) AS Revenue
-        FROM Invoice i
-        JOIN Branch b ON i.BranchID = b.BranchID
+  FROM dbo.Invoice i
+  JOIN dbo.Branch b ON i.BranchID = b.BranchID
         WHERE i.InvoiceDate >= @FromDate
           AND i.PaymentStatus = 'Paid'
         GROUP BY b.BranchName;
@@ -43,9 +43,9 @@ const getDashboard = async (req, res) => {
         SELECT
           s.ServiceName,
           SUM(l.LineAmount) AS Revenue
-        FROM ServiceInvoiceLine l
-        JOIN Service s ON l.ServiceID = s.ServiceID
-        JOIN Invoice i ON l.InvoiceID = i.InvoiceID
+  FROM dbo.ServiceInvoiceLine l
+  JOIN dbo.Service s ON l.ServiceID = s.ServiceID
+  JOIN dbo.Invoice i ON l.InvoiceID = i.InvoiceID
         WHERE i.InvoiceDate >= @FromDate
           AND i.PaymentStatus = 'Paid'
         GROUP BY s.ServiceName
@@ -55,15 +55,15 @@ const getDashboard = async (req, res) => {
         SELECT 
           Species,
           COUNT(*) AS Total
-        FROM Pet
+  FROM dbo.Pet
         GROUP BY Species;
 
         /* 5. Thống kê hạng thành viên */
         SELECT 
           m.RankName,
           COUNT(u.UserID) AS Total
-        FROM Users u
-        LEFT JOIN Membership m ON u.RankID = m.RankID
+  FROM dbo.Users u
+  LEFT JOIN dbo.Membership m ON u.RankID = m.RankID
         GROUP BY m.RankName;
 
         /* 6. Doanh thu công ty theo từng tháng */
@@ -72,7 +72,7 @@ const getDashboard = async (req, res) => {
           YEAR(i.InvoiceDate) AS Year,
           MONTH(i.InvoiceDate) AS MonthNumber,
           SUM(i.FinalAmount) AS Revenue
-        FROM Invoice i
+        FROM dbo.Invoice i
         WHERE i.InvoiceDate >= @FromDate
           AND i.PaymentStatus = 'Paid'
         GROUP BY
