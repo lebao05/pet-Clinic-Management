@@ -17,11 +17,30 @@ export const addBranch = async ({ branchName, address, phone, openTime, closeTim
     return response.data;
 }
 
-export const addEmployee = async ({ name, email, phone, role, branchId }) => {
-    const response = await axios.post("/company-owner/add-employee", { name, email, phone, role, branchId });
+export const addEmployee = async ({
+    name,
+    phone,
+    role,
+    branchId,
+    dateOfBirth,
+    gender,
+    baseSalary,
+}) => {
+    const response = await axios.post("/company-owner/add-employee", {
+        fullName: name,
+        phone,
+        role,
+        branchId,
+        dateOfBirth,
+        gender,
+        baseSalary
+        // ❌ KHÔNG gửi passwordHash
+        // ❌ KHÔNG gửi password
+    });
+
     console.log("Add Employee Response:", response);
     return response.data;
-}
+};
 export const getEmployees = async ({ role, branchId, page, pageSize }) => {
     const response = await axios.get("/company-owner/employees", {
         params: { role, branchId, page, pageSize }
@@ -49,5 +68,34 @@ export const getBranches = async () => {
 export const updateBranch = async (branchId, { branchName, address, phone, openTime, closeTime }) => {
     const response = await axios.put(`/company-owner/update-branch/${branchId}`, { branchName, address, phone, openTime, closeTime });
     console.log("Update Branch Response:", response);
+    return response.data;
+}
+export const updateEmployee = async (
+    employeeId,
+    {
+        fullName,
+        gender,
+        dateOfBirth,
+        role,
+        baseSalary,
+    }
+) => {
+    const response = await axios.put(
+        `/company-owner/update-employee/${employeeId}`,
+        {
+            fullName,
+            gender,
+            dateOfBirth,
+            role,
+            baseSalary,
+        }
+    );
+
+    console.log("Update Employee Response:", response);
+    return response.data;
+};
+export const resignEmployee = async (employeeId) => {
+    const response = await axios.put(`/company-owner/resign-employee/${employeeId}`);
+    console.log("Resign Employee Response:", response);
     return response.data;
 }

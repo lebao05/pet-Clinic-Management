@@ -10,6 +10,7 @@ const Button = ({
   disabled = false,
   fullWidth = false,
   className = "",
+  type = "button",
 }) => {
   const baseStyles = "font-medium rounded-lg transition-all duration-200 inline-flex items-center justify-center gap-2";
 
@@ -29,6 +30,7 @@ const Button = ({
 
   return (
     <button
+      type={type}
       onClick={onClick}
       disabled={disabled}
       className={`

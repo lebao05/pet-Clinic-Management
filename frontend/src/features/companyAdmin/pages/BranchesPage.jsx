@@ -155,7 +155,7 @@ export default function BranchesPage() {
                   <h3 className="font-bold text-lg leading-tight">{branch.BranchName}</h3>
                   <span className="text-xs font-mono text-gray-400">ID: {branch.BranchID}</span>
                 </div>
-                <span className="text-xs px-2 py-1 rounded-full bg-green-50 text-green-700 border border-green-100 font-medium">{branch.City || "N/A"}</span>
+                {/* <span className="text-xs px-2 py-1 rounded-full bg-green-50 text-green-700 border border-green-100 font-medium">{branch.City || "N/A"}</span> */}
               </div>
 
               <div className="p-5 space-y-3 flex-grow">

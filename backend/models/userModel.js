@@ -10,8 +10,8 @@ class UserModel {
                     SELECT u.UserID, u.FullName, u.Phone, u.Email, u.Gender, 
                            u.BirthDate, u.LoyaltyPoints, m.RankName,
                            m.DiscountPercent
-                    FROM Users u
-                    LEFT JOIN Membership m ON u.RankID = m.RankID
+                    FROM dbo.Users u
+                    LEFT JOIN dbo.Membership m ON u.RankID = m.RankID
                     WHERE u.IsActive = 1
                     ORDER BY u.UserID DESC
                 `);
@@ -28,8 +28,8 @@ class UserModel {
       const result = await pool.request().input("id", sql.Int, id).query(`
                     SELECT u.*, m.RankName, m.DiscountPercent,
                            m.MinSpendPerYear, m.KeepSpendPerYear
-                    FROM Users u
-                    LEFT JOIN Membership m ON u.RankID = m.RankID
+                    FROM dbo.Users u
+                    LEFT JOIN dbo.Membership m ON u.RankID = m.RankID
                     WHERE u.UserID  = @id AND u.IsActive = 1
                 `);
       return result.recordset[0];
@@ -45,7 +45,7 @@ class UserModel {
       const result = await pool
         .request()
         .input("phone", sql.NVarChar, phone)
-        .query("SELECT * FROM Users WHERE Phone = @phone AND IsActive = 1");
+  .query("SELECT * FROM dbo.Users WHERE Phone = @phone AND IsActive = 1");
       return result.recordset[0];
     } catch (err) {
       throw err;
@@ -64,7 +64,7 @@ class UserModel {
         .input("cccd", sql.NVarChar, userData.cccd || null)
         .input("gender", sql.NVarChar, userData.gender || null)
         .input("birthDate", sql.Date, userData.birthDate || null).query(`
-                    INSERT INTO Users (FullName, Phone, Email, CCCD, Gender, BirthDate, RankID, LoyaltyPoints)
+                    INSERT INTO dbo.Users (FullName, Phone, Email, CCCD, Gender, BirthDate, RankID, LoyaltyPoints)
                     VALUES (@fullName, @phone, @email, @cccd, @gender, @birthDate, 1, 0);
                     SELECT SCOPE_IDENTITY() AS UserID;
                 `);
@@ -111,7 +111,7 @@ class UserModel {
     try {
       const pool = await getConnection();
       const result = await pool.request().input("userId", sql.Int, userId).query(`
-                    SELECT * FROM Pet 
+                    SELECT * FROM dbo.Pet 
                     WHERE UserID = @userId AND IsActive = 1
                     ORDER BY PetID DESC
                 `);
@@ -128,11 +128,11 @@ class UserModel {
       const result = await pool.request().input("userId", sql.Int, userId).query(`
                     SELECT a.*, s.ServiceName, b.BranchName, 
                            p.PetName, e.FullName AS DoctorName
-                    FROM Appointment a
-                    INNER JOIN Service s ON a.ServiceID = s.ServiceID
-                    INNER JOIN Branch b ON a.BranchID = b.BranchID
-                    INNER JOIN Pet p ON a.PetID = p.PetID
-                    LEFT JOIN Employee e ON a.DoctorID = e.EmployeeID
+                    FROM dbo.Appointment a
+                    INNER JOIN dbo.Service s ON a.ServiceID = s.ServiceID
+                    INNER JOIN dbo.Branch b ON a.BranchID = b.BranchID
+                    INNER JOIN dbo.Pet p ON a.PetID = p.PetID
+                    LEFT JOIN dbo.Employee e ON a.DoctorID = e.EmployeeID
                     WHERE a.UserID = @userId
                     ORDER BY a.ScheduleTime DESC
                 `);

@@ -1,10 +1,10 @@
 const express = require("express");
-const apiKeyAuth = require("../middleware/apiKeyAuth");
 const CashierController = require("../controllers/cashierController");
 
 const router = express.Router();
-router.use(apiKeyAuth);
 
+// Simple demo endpoints for Cashier POS
+router.get("/pets", CashierController.listPetsByUser);
 router.get("/services", CashierController.listServices);
 router.get("/products", CashierController.listProducts);
 router.post("/invoices", CashierController.createInvoice);
