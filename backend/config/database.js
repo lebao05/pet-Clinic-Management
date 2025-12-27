@@ -1,10 +1,14 @@
 const sql = require("mssql");
 
+// NOTE: Prefer environment variables. Fallbacks keep the original defaults.
+// Recommended .env keys: DB_SERVER, DB_DATABASE, DB_USER, DB_PASSWORD
 const config = {
-  server: "petcarex.database.windows.net", // Azure SQL server name
-  database: "petcarex",
-  user: "nhan", // Đổi tên user phù hợp
-  password: "Trongnh@n2401", // Lưu ý không commit password thực lên git/public repo!
+  // Azure SQL server name, e.g. "petcarex.database.windows.net"
+  server: process.env.DB_SERVER || "",
+  // Database name, e.g. "PetCareX_Optimized"
+  database: process.env.DB_DATABASE || "",
+  user: process.env.DB_USER || "",
+  password: process.env.DB_PASSWORD || "",
   options: {
     encrypt: true, // Azure yêu cầu
     trustServerCertificate: false,

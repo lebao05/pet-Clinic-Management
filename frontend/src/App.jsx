@@ -11,6 +11,8 @@ import CustomerProfilePage from "./features/customer/pages/ProfilePage";
 import ManagerRoutes from "./routes/ManagerRoutes";
 import ReceptionistRoutes from "./routes/ReceptionistRoutes";
 import AdminRoutes from "./routes/AdminRoutes";
+import DoctorRoutes from "./routes/DoctorRoutes";
+import CashierRoutes from "./routes/CashierRoutes";
 
 function App() {
   return (
@@ -30,6 +32,12 @@ function App() {
 
         {/* Receptionist Routes */}
         <Route path="/receptionist/*" element={<ReceptionistRoutes />} />
+
+        {/* Doctor Routes */}
+        <Route path="/doctor/*" element={<DoctorRoutes />} />
+
+        {/* Cashier Routes */}
+        <Route path="/cashier/*" element={<CashierRoutes />} />
 
         {/* Company Admin Routes */}
         <Route path="/admin/*" element={<AdminRoutes />} />
