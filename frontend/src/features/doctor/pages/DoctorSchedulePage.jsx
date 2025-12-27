@@ -47,22 +47,30 @@ const DoctorSchedulePage = () => {
       </div>
 
       <Card className="p-5">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div>
-            <label className="text-sm text-neutral-600">DoctorID</label>
-            <Input type="number" value={doctorId} onChange={(e) => setDoctorId(e.target.value)} />
+        {/* Wrap controls in a form so Enter submits the search */}
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            load();
+          }}
+        >
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div>
+              <label className="text-sm text-neutral-600">DoctorID</label>
+              <Input type="number" value={doctorId} onChange={(e) => setDoctorId(e.target.value)} />
+            </div>
+            <div>
+              <label className="text-sm text-neutral-600">Date (optional)</label>
+              <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+            </div>
+            <div className="flex items-end">
+              <Button fullWidth type="submit" disabled={loading}>
+                Load appointments
+              </Button>
+            </div>
           </div>
-          <div>
-            <label className="text-sm text-neutral-600">Date (optional)</label>
-            <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
-          </div>
-          <div className="flex items-end">
-            <Button onClick={load} fullWidth disabled={loading}>
-              Load appointments
-            </Button>
-          </div>
-        </div>
-        {error && <div className="mt-3 text-danger-600 text-sm">{error}</div>}
+          {error && <div className="mt-3 text-danger-600 text-sm">{error}</div>}
+        </form>
       </Card>
 
       <Card className="p-5">

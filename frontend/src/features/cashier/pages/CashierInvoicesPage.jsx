@@ -49,25 +49,33 @@ const CashierInvoicesPage = () => {
       {error && <div className="text-danger-600 text-sm">{error}</div>}
 
       <Card className="p-5">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <div>
-            <label className="text-sm text-neutral-600">BranchID</label>
-            <Input type="number" value={branchId} onChange={(e) => setBranchId(e.target.value)} />
+        {/* Wrap controls in a form so Enter key triggers the same load() as clicking Filter */}
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            load();
+          }}
+        >
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div>
+              <label className="text-sm text-neutral-600">BranchID</label>
+              <Input type="number" value={branchId} onChange={(e) => setBranchId(e.target.value)} />
+            </div>
+            <div>
+              <label className="text-sm text-neutral-600">From (optional)</label>
+              <Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} />
+            </div>
+            <div>
+              <label className="text-sm text-neutral-600">To (optional)</label>
+              <Input type="date" value={to} onChange={(e) => setTo(e.target.value)} />
+            </div>
+            <div className="flex items-end">
+              <Button fullWidth type="submit" disabled={loading}>
+                Filter
+              </Button>
+            </div>
           </div>
-          <div>
-            <label className="text-sm text-neutral-600">From (optional)</label>
-            <Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} />
-          </div>
-          <div>
-            <label className="text-sm text-neutral-600">To (optional)</label>
-            <Input type="date" value={to} onChange={(e) => setTo(e.target.value)} />
-          </div>
-          <div className="flex items-end">
-            <Button fullWidth onClick={load} disabled={loading}>
-              Filter
-            </Button>
-          </div>
-        </div>
+        </form>
       </Card>
 
       <Card className="p-5">
