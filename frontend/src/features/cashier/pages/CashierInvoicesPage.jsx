@@ -11,6 +11,7 @@ const CashierInvoicesPage = () => {
   const [branchId, setBranchId] = useState(1);
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
+  const [userId, setUserId] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [rows, setRows] = useState([]);
@@ -22,6 +23,7 @@ const CashierInvoicesPage = () => {
       const params = { branchId };
       if (from) params.from = from;
       if (to) params.to = to;
+  if (userId) params.userId = userId;
       const res = await axiosClient.get("/cashier/invoices", { params });
       setRows(Array.isArray(res.data) ? res.data : []);
     } catch (e) {
@@ -41,7 +43,7 @@ const CashierInvoicesPage = () => {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold text-neutral-900">Invoices</h1>
-        <Button onClick={load} disabled={loading}>
+        <Button onClick={load} variant="dark" disabled={loading}>
           {loading ? "Loading..." : "Refresh"}
         </Button>
       </div>
@@ -69,8 +71,13 @@ const CashierInvoicesPage = () => {
               <label className="text-sm text-neutral-600">To (optional)</label>
               <Input type="date" value={to} onChange={(e) => setTo(e.target.value)} />
             </div>
+            <div>
+              <label className="text-sm text-neutral-600">UserID (optional)</label>
+              <Input type="number" value={userId} onChange={(e) => setUserId(e.target.value)} />
+            </div>
+            
             <div className="flex items-end">
-              <Button fullWidth type="submit" disabled={loading}>
+              <Button fullWidth type="submit" variant="dark" disabled={loading}>
                 Filter
               </Button>
             </div>

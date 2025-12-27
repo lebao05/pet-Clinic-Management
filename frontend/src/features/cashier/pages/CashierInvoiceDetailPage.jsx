@@ -56,8 +56,8 @@ const CashierInvoiceDetailPage = () => {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold text-neutral-900">Invoice #{data.invoice.invoiceId}</h1>
-          <div className="text-sm text-neutral-600">{new Date(data.invoice.invoiceDate).toLocaleString()}</div>
+          <h1 className="text-2xl font-semibold text-neutral-900">Invoice #{data.invoiceId}</h1>
+          <div className="text-sm text-neutral-600">{new Date(data.invoiceDate).toLocaleString()}</div>
         </div>
         <div className="flex gap-2">
           <Button variant="outline" onClick={() => navigate(-1)}>
@@ -70,37 +70,37 @@ const CashierInvoiceDetailPage = () => {
       <Card className="p-5">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div>
-            <div className="text-sm text-neutral-600">Customer</div>
-            <div className="font-medium">{data.user.fullName}</div>
-            <div className="text-xs text-neutral-500">{data.user.phone}</div>
+              <div className="text-sm text-neutral-600">Customer</div>
+              <div className="font-medium">{data.customer?.fullName}</div>
+              <div className="text-xs text-neutral-500">{data.customer?.phone}</div>
           </div>
           <div>
             <div className="text-sm text-neutral-600">Cashier</div>
-            <div className="font-medium">{data.cashier.fullName}</div>
+              <div className="font-medium">{data.staff?.fullName}</div>
           </div>
           <div>
             <div className="text-sm text-neutral-600">Payment</div>
-            <div className="font-medium">{data.invoice.paymentMethod}</div>
-            <div className="text-xs text-neutral-500">{data.invoice.paymentStatus}</div>
+              <div className="font-medium">{data.payment?.method}</div>
+              <div className="text-xs text-neutral-500">{data.payment?.status}</div>
           </div>
         </div>
 
         <div className="mt-4 flex flex-wrap gap-6">
           <div>
             <div className="text-sm text-neutral-600">Original</div>
-            <div className="font-semibold">{data.invoice.originalAmount}</div>
+            <div className="font-semibold">{data.amounts?.originalAmount}</div>
           </div>
           <div>
             <div className="text-sm text-neutral-600">Discount</div>
-            <div className="font-semibold">{data.invoice.discountAmount}</div>
+            <div className="font-semibold">{data.amounts?.discountAmount}</div>
           </div>
           <div>
             <div className="text-sm text-neutral-600">Final</div>
-            <div className="font-semibold">{data.invoice.finalAmount}</div>
+            <div className="font-semibold">{data.amounts?.finalAmount}</div>
           </div>
         </div>
 
-        {data.pets.length > 0 && (
+        {(data.pets || []).length > 0 && (
           <div className="mt-4">
             <div className="text-sm text-neutral-600">Pets</div>
             <div className="flex flex-wrap gap-2 mt-1">

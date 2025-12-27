@@ -1,348 +1,206 @@
-import React, { useMemo, useState, useEffect } from "react";
+import React, { useState } from "react";
 import axiosClient from "../../../api/axiosClient";
 import { Card } from "../../../shared/components/ui/Card";
 import { Input } from "../../../shared/components/ui/Input";
 import Button from "../../../shared/components/ui/Button";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../../../shared/components/ui/Table";
 
 const CashierPosPage = () => {
-  const [branchId, setBranchId] = useState(1);
-  const [staffId, setStaffId] = useState(1);
-  const [userId, setUserId] = useState(1);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-
+  const [searchUserId, setSearchUserId] = useState("");
+  const [searchPetId, setSearchPetId] = useState("");
   const [pets, setPets] = useState([]);
-  const [selectedPetIds, setSelectedPetIds] = useState([]);
-  const [services, setServices] = useState([]);
-  const [products, setProducts] = useState([]);
+  const [checkedPet, setCheckedPet] = useState(null);
+  const [searchResults, setSearchResults] = useState([]);
+  const [searchFilters, setSearchFilters] = useState({ branchId: 1, userId: "", petId: "", staffId: "", serviceId: "" });
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  const [serviceCart, setServiceCart] = useState([]); // {serviceId, name, type, qty, unitPrice}
-  const [productCart, setProductCart] = useState([]); // {productId, name, qty, unitPrice}
-  const [discountAmount, setDiscountAmount] = useState(0);
-  const [paymentMethod, setPaymentMethod] = useState("Cash");
+  const [walkin, setWalkin] = useState({ branchId: 1, userId: "", petId: "", serviceId: "", staffId: "" });
 
-  const loadData = async () => {
+  const searchPets = async (e) => {
+    if (e) e.preventDefault();
     setError("");
     setLoading(true);
     try {
-      const [petRes, serviceRes, productRes] = await Promise.all([
-        axiosClient.get("/cashier/pets", { params: { userId } }),
-        axiosClient.get("/cashier/services", { params: { branchId } }),
-        axiosClient.get("/cashier/products", { params: { branchId } }),
-      ]);
-      setPets(Array.isArray(petRes.data) ? petRes.data : []);
-      setSelectedPetIds([]);
-      setServices(Array.isArray(serviceRes.data) ? serviceRes.data : []);
-      setProducts(Array.isArray(productRes.data) ? productRes.data : []);
-    } catch (e) {
-      setError(e.response?.data?.message || "Failed to load data");
+      if (!searchUserId || !searchPetId) {
+        setError("Please enter both Customer UserID and PetID to search.");
+        setCheckedPet(null);
+        setPets([]);
+        return;
+      }
+      const res = await axiosClient.get(`/cashier/pets/${searchPetId}`, { params: { userId: searchUserId } });
+      setCheckedPet(res.data);
+      setPets([]);
+    } catch (err) {
+      setError(err.response?.data?.message || "Failed to search pet");
+      setCheckedPet(null);
+      setPets([]);
     } finally {
       setLoading(false);
     }
   };
 
-  // Auto-load customer + catalog when the page mounts so the POS shows data immediately
-  useEffect(() => {
-    loadData();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const addService = (s) => {
-    setServiceCart((prev) => {
-      const idx = prev.findIndex((x) => x.serviceId === s.serviceId);
-      if (idx >= 0) {
-        const copy = [...prev];
-        copy[idx] = { ...copy[idx], qty: copy[idx].qty + 1 };
-        return copy;
-      }
-      return [...prev, { serviceId: s.serviceId, name: s.name, type: s.type, qty: 1, unitPrice: s.price }];
-    });
-  };
-
-  const addProduct = (p) => {
-    setProductCart((prev) => {
-      const idx = prev.findIndex((x) => x.productId === p.productId);
-      if (idx >= 0) {
-        const copy = [...prev];
-        copy[idx] = { ...copy[idx], qty: copy[idx].qty + 1 };
-        return copy;
-      }
-      return [...prev, { productId: p.productId, name: p.name, qty: 1, unitPrice: p.sellingPrice }];
-    });
-  };
-
-  const totals = useMemo(() => {
-    const serviceSubtotal = serviceCart.reduce((sum, l) => sum + Number(l.qty) * Number(l.unitPrice), 0);
-    const productSubtotal = productCart.reduce((sum, l) => sum + Number(l.qty) * Number(l.unitPrice), 0);
-    const original = Math.round((serviceSubtotal + productSubtotal) * 100) / 100;
-    const discount = Math.max(0, Number(discountAmount) || 0);
-    const final = Math.max(0, Math.round((original - discount) * 100) / 100);
-    return { original, discount, final };
-  }, [serviceCart, productCart, discountAmount]);
-
-  const createInvoice = async () => {
+  const searchInvoices = async (e) => {
+    if (e) e.preventDefault();
     setError("");
     setLoading(true);
+    try {
+      const params = {};
+      if (searchFilters.branchId) params.branchId = Number(searchFilters.branchId);
+      if (searchFilters.userId) params.userId = Number(searchFilters.userId);
+      if (searchFilters.petId) params.petId = Number(searchFilters.petId);
+      if (searchFilters.staffId) params.staffId = Number(searchFilters.staffId);
+      if (searchFilters.serviceId) params.serviceId = Number(searchFilters.serviceId);
+
+      const res = await axiosClient.get("/cashier/invoices", { params });
+      setSearchResults(Array.isArray(res.data) ? res.data : []);
+    } catch (err) {
+      setError(err.response?.data?.message || "Failed to search invoices");
+      setSearchResults([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const createWalkin = async (e) => {
+    e.preventDefault();
+    setError("");
     try {
       const payload = {
-        branchId: Number(branchId),
-        userId: Number(userId),
-        staffId: Number(staffId),
-        paymentMethod,
-        paymentStatus: "Paid",
-        discountAmount: Number(discountAmount) || 0,
-        petIds: selectedPetIds,
-        serviceLines: serviceCart.map((l) => ({ serviceId: l.serviceId, quantity: Number(l.qty), unitPrice: Number(l.unitPrice) })),
-        productLines: productCart.map((l) => ({ productId: l.productId, quantity: Number(l.qty), unitPrice: Number(l.unitPrice) })),
+        branchId: Number(walkin.branchId),
+        userId: Number(walkin.userId),
+        petId: Number(walkin.petId),
+        serviceId: walkin.serviceId ? Number(walkin.serviceId) : null,
+        staffId: walkin.staffId ? Number(walkin.staffId) : null,
       };
-      const res = await axiosClient.post("/cashier/invoices", payload);
-      // Reset carts on success
-      setServiceCart([]);
-      setProductCart([]);
-      setDiscountAmount(0);
-      alert(`Created invoice #${res.data.invoiceId} (Final: ${res.data.finalAmount})`);
-    } catch (e) {
-      setError(e.response?.data?.message || "Failed to create invoice");
-    } finally {
-      setLoading(false);
+      const res = await axiosClient.post("/cashier/walkin", payload);
+      alert(`Created walk-in appointment #${res.data.appointmentId}`);
+      // clear petId and keep other fields
+      setWalkin({ ...walkin, petId: "" });
+    } catch (err) {
+      setError(err.response?.data?.message || "Failed to create walk-in");
     }
-  };
-
-  const togglePet = (petId) => {
-    setSelectedPetIds((prev) => (prev.includes(petId) ? prev.filter((x) => x !== petId) : [...prev, petId]));
   };
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold text-neutral-900">Cashier POS</h1>
-        <Button onClick={loadData} disabled={loading}>
-          {loading ? "Loading..." : "Load"}
-        </Button>
+        <h1 className="text-2xl font-semibold text-neutral-900">Cashier (Demo)</h1>
       </div>
 
-      {error && <div className="text-danger-600 text-sm">{error}</div>}
-
-      <Card className="p-5">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <Card className="p-4">
+        <form onSubmit={searchPets} className="grid grid-cols-1 md:grid-cols-4 gap-3">
           <div>
-            <label className="text-sm text-neutral-600">BranchID</label>
-            <Input type="number" value={branchId} onChange={(e) => setBranchId(e.target.value)} />
+            <label className="text-sm text-neutral-600">Customer UserID (required)</label>
+            <Input value={searchUserId} onChange={(e) => setSearchUserId(e.target.value)} />
           </div>
           <div>
-            <label className="text-sm text-neutral-600">Cashier (StaffID)</label>
-            <Input type="number" value={staffId} onChange={(e) => setStaffId(e.target.value)} />
-          </div>
-          <div>
-            <label className="text-sm text-neutral-600">Customer (UserID)</label>
-            <Input type="number" value={userId} onChange={(e) => setUserId(e.target.value)} />
+            <label className="text-sm text-neutral-600">PetID (required)</label>
+            <Input value={searchPetId} onChange={(e) => setSearchPetId(e.target.value)} />
           </div>
           <div className="flex items-end">
-            <Button fullWidth onClick={loadData} disabled={loading}>
-              Load customer + catalog
-            </Button>
+            <Button type="submit" variant="dark" disabled={loading || !searchUserId || !searchPetId}>{loading ? 'Searching...' : 'Search'}</Button>
           </div>
+        </form>
+        {error && <div className="mt-2 text-danger-600">{error}</div>}
+
+        <div className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-3">
+          {checkedPet ? (
+            <div key={checkedPet.petId} className="p-3 border rounded bg-white">
+              <div className="font-medium">{checkedPet.name} {checkedPet.breed ? `• ${checkedPet.breed}` : ''}</div>
+              <div className="text-xs text-neutral-500">Owner: {checkedPet.owner?.fullName} • {checkedPet.owner?.phone}</div>
+              <div className="text-xs mt-1">{checkedPet.hasHistory ? 'Returning' : 'First-time'}</div>
+              {!checkedPet.isOwnerMatch && <div className="text-xs text-danger-600 mt-1">Warning: provided UserID does not match pet owner.</div>}
+            </div>
+          ) : (
+            pets.map((p) => (
+              <div key={p.petId} className="p-3 border rounded bg-white">
+                <div className="font-medium">{p.name} {p.breed ? `• ${p.breed}` : ''}</div>
+                <div className="text-xs text-neutral-500">Owner: {p.owner?.fullName} • {p.owner?.phone}</div>
+                <div className="text-xs mt-1">{p.hasHistory ? 'Returning' : 'First-time'}</div>
+              </div>
+            ))
+          )}
         </div>
       </Card>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <Card className="p-5 lg:col-span-2 space-y-6">
+      <Card className="p-4">
+        <h2 className="font-medium">Create walk-in appointment</h2>
+        <form onSubmit={createWalkin} className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-3">
           <div>
-            <h2 className="text-lg font-semibold text-neutral-900">Customer pets</h2>
-            <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3">
-              {pets.length === 0 ? (
-                <div className="text-neutral-500 text-sm">No pets (load by UserID)</div>
-              ) : (
-                pets.map((p) => (
-                  <label key={p.petId} className="flex items-center gap-3 p-3 border rounded-lg bg-white">
-                    <input type="checkbox" checked={selectedPetIds.includes(p.petId)} onChange={() => togglePet(p.petId)} />
-                    <div>
-                      <div className="font-medium">{p.name}</div>
-                      <div className="text-xs text-neutral-500">{p.species}{p.breed ? ` • ${p.breed}` : ""}</div>
-                    </div>
-                  </label>
-                ))
-              )}
-            </div>
+            <label className="text-sm text-neutral-600">BranchID</label>
+            <Input value={walkin.branchId} onChange={(e) => setWalkin({ ...walkin, branchId: e.target.value })} />
           </div>
-
           <div>
-            <h2 className="text-lg font-semibold text-neutral-900">Services</h2>
-            <Card className="p-0 mt-3">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Name</TableHead>
-                    <TableHead>Type</TableHead>
-                    <TableHead className="text-right">Price</TableHead>
-                    <TableHead className="text-right">Action</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {services.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={4} className="text-center text-neutral-500 py-6">
-                        No services (load by BranchID)
-                      </TableCell>
-                    </TableRow>
-                  ) : (
-                    services.map((s) => (
-                      <TableRow key={s.serviceId}>
-                        <TableCell className="font-medium">{s.name}</TableCell>
-                        <TableCell>{s.type}</TableCell>
-                        <TableCell className="text-right">{s.price}</TableCell>
-                        <TableCell className="text-right">
-                          <Button size="sm" variant="outline" onClick={() => addService(s)}>
-                            Add
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    ))
-                  )}
-                </TableBody>
-              </Table>
-            </Card>
+            <label className="text-sm text-neutral-600">Customer UserID (required)</label>
+            <Input value={walkin.userId} onChange={(e) => setWalkin({ ...walkin, userId: e.target.value })} />
           </div>
-
           <div>
-            <h2 className="text-lg font-semibold text-neutral-900">Products</h2>
-            <Card className="p-0 mt-3">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Name</TableHead>
-                    <TableHead className="text-right">Stock</TableHead>
-                    <TableHead className="text-right">Price</TableHead>
-                    <TableHead className="text-right">Action</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {products.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={4} className="text-center text-neutral-500 py-6">
-                        No products (load by BranchID)
-                      </TableCell>
-                    </TableRow>
-                  ) : (
-                    products.map((p) => (
-                      <TableRow key={p.productId}>
-                        <TableCell className="font-medium">{p.name}</TableCell>
-                        <TableCell className="text-right">{p.stockQty}</TableCell>
-                        <TableCell className="text-right">{p.sellingPrice}</TableCell>
-                        <TableCell className="text-right">
-                          <Button size="sm" variant="outline" onClick={() => addProduct(p)} disabled={p.stockQty <= 0}>
-                            Add
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    ))
-                  )}
-                </TableBody>
-              </Table>
-            </Card>
+            <label className="text-sm text-neutral-600">PetID (required)</label>
+            <Input value={walkin.petId} onChange={(e) => setWalkin({ ...walkin, petId: e.target.value })} />
           </div>
-        </Card>
-
-        <Card className="p-5 space-y-4">
-          <h2 className="text-lg font-semibold text-neutral-900">Cart</h2>
-
           <div>
-            <div className="text-sm font-medium text-neutral-700">Service lines</div>
-            {serviceCart.length === 0 ? (
-              <div className="text-sm text-neutral-500 mt-2">No services</div>
-            ) : (
-              <div className="space-y-2 mt-2">
-                {serviceCart.map((l) => (
-                  <div key={l.serviceId} className="flex items-center justify-between gap-2">
-                    <div className="min-w-0">
-                      <div className="font-medium truncate">{l.name}</div>
-                      <div className="text-xs text-neutral-500">{l.type} • {l.unitPrice}</div>
-                    </div>
-                    <Input
-                      type="number"
-                      className="w-20"
-                      value={l.qty}
-                      min={1}
-                      onChange={(e) =>
-                        setServiceCart((prev) =>
-                          prev.map((x) => (x.serviceId === l.serviceId ? { ...x, qty: Number(e.target.value || 1) } : x))
-                        )
-                      }
-                    />
+            <label className="text-sm text-neutral-600">ServiceID (optional)</label>
+            <Input value={walkin.serviceId} onChange={(e) => setWalkin({ ...walkin, serviceId: e.target.value })} />
+          </div>
+          <div>
+            <label className="text-sm text-neutral-600">StaffID (optional)</label>
+            <Input value={walkin.staffId} onChange={(e) => setWalkin({ ...walkin, staffId: e.target.value })} />
+          </div>
+          <div className="flex items-center gap-2">
+            <Button type="submit" variant="dark" disabled={!walkin.userId || !walkin.petId}>Create walk-in</Button>
+          </div>
+        </form>
+      </Card>
+
+      <Card className="p-4">
+        <h2 className="font-medium">Search invoices (optional filters)</h2>
+        <form onSubmit={searchInvoices} className="grid grid-cols-1 md:grid-cols-6 gap-3 mt-3">
+          <div>
+            <label className="text-sm text-neutral-600">BranchID</label>
+            <Input value={searchFilters.branchId} onChange={(e) => setSearchFilters({ ...searchFilters, branchId: e.target.value })} />
+          </div>
+          <div>
+            <label className="text-sm text-neutral-600">UserID</label>
+            <Input value={searchFilters.userId} onChange={(e) => setSearchFilters({ ...searchFilters, userId: e.target.value })} />
+          </div>
+          <div>
+            <label className="text-sm text-neutral-600">PetID</label>
+            <Input value={searchFilters.petId} onChange={(e) => setSearchFilters({ ...searchFilters, petId: e.target.value })} />
+          </div>
+          <div>
+            <label className="text-sm text-neutral-600">StaffID</label>
+            <Input value={searchFilters.staffId} onChange={(e) => setSearchFilters({ ...searchFilters, staffId: e.target.value })} />
+          </div>
+          <div>
+            <label className="text-sm text-neutral-600">ServiceID</label>
+            <Input value={searchFilters.serviceId} onChange={(e) => setSearchFilters({ ...searchFilters, serviceId: e.target.value })} />
+          </div>
+          <div className="flex items-end">
+            <Button type="submit" variant="dark" disabled={loading}>{loading ? 'Searching...' : 'Search'}</Button>
+          </div>
+        </form>
+
+        <div className="mt-4">
+          {searchResults.length === 0 ? (
+            <div className="text-neutral-500">No invoices</div>
+          ) : (
+            <div className="space-y-2">
+              {searchResults.map((r) => (
+                <div key={r.invoiceId} className="p-2 border rounded flex justify-between items-center">
+                  <div>
+                    <div className="font-medium">Invoice #{r.invoiceId}</div>
+                    <div className="text-xs text-neutral-500">{new Date(r.invoiceDate).toLocaleString()} — {r.user?.fullName}</div>
                   </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          <div>
-            <div className="text-sm font-medium text-neutral-700">Product lines</div>
-            {productCart.length === 0 ? (
-              <div className="text-sm text-neutral-500 mt-2">No products</div>
-            ) : (
-              <div className="space-y-2 mt-2">
-                {productCart.map((l) => (
-                  <div key={l.productId} className="flex items-center justify-between gap-2">
-                    <div className="min-w-0">
-                      <div className="font-medium truncate">{l.name}</div>
-                      <div className="text-xs text-neutral-500">{l.unitPrice}</div>
-                    </div>
-                    <Input
-                      type="number"
-                      className="w-20"
-                      value={l.qty}
-                      min={1}
-                      onChange={(e) =>
-                        setProductCart((prev) =>
-                          prev.map((x) => (x.productId === l.productId ? { ...x, qty: Number(e.target.value || 1) } : x))
-                        )
-                      }
-                    />
+                  <div className="text-right">
+                    <div className="font-semibold">{r.finalAmount}</div>
+                    <Button variant="outline" size="sm" onClick={() => window.location.assign(`/cashier/invoices/${r.invoiceId}`)}>View</Button>
                   </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          <div className="pt-2 border-t">
-            <label className="text-sm text-neutral-600">Discount amount</label>
-            <Input type="number" value={discountAmount} onChange={(e) => setDiscountAmount(e.target.value)} />
-          </div>
-
-          <div>
-            <label className="text-sm text-neutral-600">Payment method</label>
-            <Input value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value)} />
-          </div>
-
-          <div className="space-y-1">
-            <div className="flex justify-between text-sm">
-              <span className="text-neutral-600">Original</span>
-              <span className="font-medium">{totals.original}</span>
+                </div>
+              ))}
             </div>
-            <div className="flex justify-between text-sm">
-              <span className="text-neutral-600">Discount</span>
-              <span className="font-medium">{totals.discount}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-neutral-800 font-semibold">Final</span>
-              <span className="font-semibold">{totals.final}</span>
-            </div>
-          </div>
-
-          <Button
-            fullWidth
-            onClick={createInvoice}
-            disabled={loading || (serviceCart.length === 0 && productCart.length === 0)}
-          >
-            Create invoice
-          </Button>
-
-          <Button fullWidth variant="outline" onClick={() => { setServiceCart([]); setProductCart([]); setDiscountAmount(0); }}>
-            Clear cart
-          </Button>
-        </Card>
-      </div>
+          )}
+        </div>
+      </Card>
     </div>
   );
 };

@@ -7,6 +7,7 @@ const DoctorLayout = () => {
   const menuItems = [
     { icon: "📅", label: "Schedule", path: "/doctor/schedule" },
     { icon: "💉", label: "Vaccines", path: "/doctor/vaccines" },
+    { icon: "💊", label: "Medicines", path: "/doctor/medicines" },
   ];
 
   const user = {

@@ -1,340 +1,213 @@
 const { getConnection, sql } = require("../config/database");
 
-function toDateOnly(isoDate) {
-  // Expect YYYY-MM-DD
-  if (!isoDate) return null;
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(isoDate)) return null;
-  return isoDate;
+function likeQuery(q) {
+  if (!q) return "%";
+  return `%${q.replace(/%/g, "\\%").replace(/_/g, "\\_")}%`;
 }
 
 const DoctorController = {
-  async listVaccines(req, res, next) {
+  // Search pets by exact PetID or exact UserID for the doctor UI.
+  // Accepts query params: petId (exact match) and/or userId (exact match).
+  // At least one of petId or userId must be provided. Returns exact matches only.
+  async searchPets(req, res, next) {
     try {
+      // Only allow exact petId search for doctor UI
+      const petId = req.query.petId ? Number(req.query.petId) : null;
+      if (!petId || Number.isNaN(petId)) {
+        return res.status(400).json({ message: "Provide petId (exact match)" });
+      }
+
       const pool = await getConnection();
-      const result = await pool.request().query(
-  `SELECT VaccineID, VaccineName, Manufacturer, DefaultDose, DefaultPrice
-   FROM dbo.Vaccine
-   WHERE IsActive = 1
-   ORDER BY VaccineName ASC`
-      );
-      return res.json(result.recordset);
+      const rq = pool.request();
+      rq.input("PetID", sql.Int, petId);
+
+      // Return the single pet
+      if (petId) {
+        const q = `SELECT p.PetID, p.PetName, p.Species, p.Breed, p.UserID, u.FullName AS OwnerName, u.Phone AS OwnerPhone,
+                        CASE WHEN EXISTS (SELECT 1 FROM dbo.Appointment a WHERE a.PetID = p.PetID) THEN 1 ELSE 0 END AS HasHistory
+                     FROM dbo.Pet p
+                     LEFT JOIN dbo.Users u ON u.UserID = p.UserID
+                     WHERE p.PetID = @PetID;`;
+        const result = await rq.query(q);
+        return res.json(
+          result.recordset.map((r) => ({
+            petId: r.PetID,
+            name: r.PetName,
+            species: r.Species,
+            breed: r.Breed,
+            owner: { userId: r.UserID, fullName: r.OwnerName, phone: r.OwnerPhone },
+            hasHistory: !!r.HasHistory,
+          }))
+        );
+      }
+      // NOTE: this branch should not be reachable because we return above
+      return res.json([]);
     } catch (err) {
       return next(err);
     }
   },
 
-  async listAppointments(req, res, next) {
+  // Get combined exam + vaccination history for a pet
+  async getPetHistory(req, res, next) {
     try {
-      const doctorId = Number(req.query.doctorId);
-      const date = toDateOnly(req.query.date);
-
-      if (!doctorId || Number.isNaN(doctorId)) {
-        return res.status(400).json({ message: "doctorId is required (number)" });
-      }
+      const petId = Number(req.params.petId);
+      if (!petId || Number.isNaN(petId)) return res.status(400).json({ message: "Invalid petId" });
 
       const pool = await getConnection();
-      const request = pool.request().input("DoctorID", sql.Int, doctorId);
 
-      let dateFilter = "";
-      if (date) {
-        request.input("Date", sql.Date, date);
-        dateFilter = "AND CAST(a.ScheduleTime AS date) = @Date";
-      }
+      const exams = await pool
+        .request()
+        .input("PetID", sql.Int, petId)
+        .query(
+          `SELECT er.ExamRecordID, er.AppointmentID, er.DoctorID, er.Symptoms, er.Diagnosis, er.Prescription, er.NextVisitDate, a.ScheduleTime
+           FROM dbo.ExamRecord er
+           JOIN dbo.Appointment a ON a.AppointmentID = er.AppointmentID
+           WHERE a.PetID = @PetID
+           ORDER BY a.ScheduleTime DESC`);
 
-      const q = `
-        SELECT
-          a.AppointmentID,
-          a.ScheduleTime,
-          a.[Status],
-          a.BranchID,
-          b.BranchName,
-          a.UserID,
-          u.FullName AS UserFullName,
-          u.Phone AS UserPhone,
-          a.PetID,
-          p.PetName,
-          p.Species,
-          p.Breed,
-          a.ServiceID,
-          s.ServiceName,
-          s.ServiceType
-  FROM dbo.Appointment a
-  JOIN dbo.Users u ON u.UserID = a.UserID
-  JOIN dbo.Pet p ON p.PetID = a.PetID
-  JOIN dbo.Service s ON s.ServiceID = a.ServiceID
-  JOIN dbo.Branch b ON b.BranchID = a.BranchID
-        WHERE a.DoctorID = @DoctorID
-          ${dateFilter}
-        ORDER BY a.ScheduleTime ASC;
-      `;
+      const vaccs = await pool
+        .request()
+        .input("PetID", sql.Int, petId)
+        .query(
+          `SELECT vr.VaccinationID, vr.AppointmentID, vr.VaccineID, v.VaccineName, vr.Dose, vr.DateGiven, vr.Note, a.ScheduleTime
+           FROM dbo.VaccinationRecord vr
+           JOIN dbo.Vaccine v ON v.VaccineID = vr.VaccineID
+           JOIN dbo.Appointment a ON a.AppointmentID = vr.AppointmentID
+           WHERE a.PetID = @PetID
+           ORDER BY a.ScheduleTime DESC`);
 
-      const result = await request.query(q);
-      const rows = result.recordset.map((r) => ({
-        appointmentId: r.AppointmentID,
-        scheduleTime: r.ScheduleTime,
-        status: r.Status,
-        branch: { branchId: r.BranchID, name: r.BranchName },
-        user: { userId: r.UserID, fullName: r.UserFullName, phone: r.UserPhone },
-        pet: { petId: r.PetID, name: r.PetName, species: r.Species, breed: r.Breed },
-        service: { serviceId: r.ServiceID, name: r.ServiceName, type: r.ServiceType },
-      }));
-      return res.json(rows);
+      return res.json({ exams: exams.recordset, vaccinations: vaccs.recordset });
     } catch (err) {
       return next(err);
     }
   },
 
-  async getAppointmentDetail(req, res, next) {
+  // Get appointments for a specific pet (used to populate appointment dropdown)
+  async getAppointmentsForPet(req, res, next) {
     try {
-      const id = Number(req.params.id);
-      if (!id || Number.isNaN(id)) {
-        return res.status(400).json({ message: "Invalid appointment id" });
-      }
-
-      const pool = await getConnection();
-      const base = await pool
-        .request()
-        .input("AppointmentID", sql.Int, id)
-        .query(
-          `
-          SELECT
-            a.AppointmentID,
-            a.ScheduleTime,
-            a.[Status],
-            a.DoctorID,
-            a.BranchID,
-            b.BranchName,
-            a.UserID,
-            u.FullName AS UserFullName,
-            u.Phone AS UserPhone,
-            a.PetID,
-            p.PetName,
-            p.Species,
-            p.Breed,
-            a.ServiceID,
-            s.ServiceName,
-            s.ServiceType
-          FROM dbo.Appointment a
-          JOIN dbo.Users u ON u.UserID = a.UserID
-          JOIN dbo.Pet p ON p.PetID = a.PetID
-          JOIN dbo.Service s ON s.ServiceID = a.ServiceID
-          JOIN dbo.Branch b ON b.BranchID = a.BranchID
-          WHERE a.AppointmentID = @AppointmentID;
-          `
-        );
-
-      if (!base.recordset.length) {
-        return res.status(404).json({ message: "Appointment not found" });
-      }
-
-      const a = base.recordset[0];
-
-      const exam = await pool
-        .request()
-        .input("AppointmentID", sql.Int, id)
-        .query(
-          `
-          SELECT ExamRecordID, DoctorID, Symptoms, Diagnosis, Prescription, NextVisitDate
-          FROM dbo.ExamRecord
-          WHERE AppointmentID = @AppointmentID;
-          `
-        );
-
-      const vacc = await pool
-        .request()
-        .input("AppointmentID", sql.Int, id)
-        .query(
-          `
-          SELECT vr.VaccinationID, vr.DoctorID, vr.VaccineID, v.VaccineName, vr.Dose, vr.DateGiven, vr.Note,
-                 vr.SubscriptionID, vr.PackageID, vr.SequenceNo
-          FROM dbo.VaccinationRecord vr
-          JOIN dbo.Vaccine v ON v.VaccineID = vr.VaccineID
-          WHERE vr.AppointmentID = @AppointmentID;
-          `
-        );
-
-      return res.json({
-        appointmentId: a.AppointmentID,
-        scheduleTime: a.ScheduleTime,
-        status: a.Status,
-        doctorId: a.DoctorID,
-        branch: { branchId: a.BranchID, name: a.BranchName },
-        user: { userId: a.UserID, fullName: a.UserFullName, phone: a.UserPhone },
-        pet: { petId: a.PetID, name: a.PetName, species: a.Species, breed: a.Breed },
-        service: { serviceId: a.ServiceID, name: a.ServiceName, type: a.ServiceType },
-        examRecord: exam.recordset[0] || null,
-        vaccinationRecord: vacc.recordset[0] || null,
-      });
-    } catch (err) {
-      return next(err);
-    }
-  },
-
-  async updateAppointmentStatus(req, res, next) {
-    try {
-      const id = Number(req.params.id);
-      const { status } = req.body || {};
-      const allowed = new Set(["Booked", "Completed", "Cancelled"]);
-
-      if (!id || Number.isNaN(id)) {
-        return res.status(400).json({ message: "Invalid appointment id" });
-      }
-      if (!allowed.has(status)) {
-        return res.status(400).json({ message: "status must be Booked|Completed|Cancelled" });
-      }
+      const petId = Number(req.params.petId);
+      if (!petId || Number.isNaN(petId)) return res.status(400).json({ message: "Invalid petId" });
 
       const pool = await getConnection();
       const result = await pool
         .request()
-        .input("AppointmentID", sql.Int, id)
-        .input("Status", sql.NVarChar(20), status)
+        .input("PetID", sql.Int, petId)
         .query(
-          `
-          UPDATE dbo.Appointment
-          SET [Status] = @Status
-          WHERE AppointmentID = @AppointmentID;
-
-          SELECT AppointmentID, [Status]
-          FROM dbo.Appointment
-          WHERE AppointmentID = @AppointmentID;
-          `
+          `SELECT a.AppointmentID, a.ScheduleTime, a.Status, a.BranchID, b.BranchName, a.ServiceID, s.ServiceName, a.DoctorID
+           FROM dbo.Appointment a
+           LEFT JOIN dbo.Branch b ON b.BranchID = a.BranchID
+           LEFT JOIN dbo.Service s ON s.ServiceID = a.ServiceID
+           WHERE a.PetID = @PetID
+           ORDER BY a.ScheduleTime DESC;`
         );
 
-      if (!result.recordset.length) {
+      return res.json(result.recordset.map((r) => ({
+        appointmentId: r.AppointmentID,
+        scheduleTime: r.ScheduleTime,
+        status: r.Status,
+        branchId: r.BranchID,
+        branchName: r.BranchName,
+        serviceId: r.ServiceID,
+        serviceName: r.ServiceName,
+        doctorId: r.DoctorID,
+      })));
+    } catch (err) {
+      return next(err);
+    }
+  },
+
+  // Simple product search used as medicines lookup
+  async searchMedicines(req, res, next) {
+    try {
+      const q = (req.query.query || req.query.q || "").toString();
+      const pool = await getConnection();
+      const result = await pool
+        .request()
+        .input("Q", sql.NVarChar(200), likeQuery(q))
+        .query(`SELECT TOP (50) ProductID, ProductName, Unit, ProductType FROM dbo.Product WHERE ProductName LIKE @Q AND UPPER(ProductType) = 'MEDICINE' ORDER BY ProductName ASC`);
+
+      return res.json(result.recordset.map((r) => ({ productId: r.ProductID, name: r.ProductName, unit: r.Unit, type: r.ProductType })));
+    } catch (err) {
+      return next(err);
+    }
+  },
+
+  // List available vaccines for catalog
+  async listVaccines(req, res, next) {
+    try {
+      const pool = await getConnection();
+      const result = await pool
+        .request()
+        .query(`SELECT VaccineID, VaccineName, Manufacturer, DefaultDose, DefaultPrice FROM dbo.Vaccine WHERE IsActive = 1 ORDER BY VaccineName ASC`);
+
+      return res.json(result.recordset.map(r => ({ VaccineID: r.VaccineID, VaccineName: r.VaccineName, Manufacturer: r.Manufacturer, DefaultDose: r.DefaultDose, DefaultPrice: r.DefaultPrice })));
+    } catch (err) {
+      return next(err);
+    }
+  },
+
+  // Create or update an exam record for an existing appointment.
+  // Flow:
+  // - appointmentId is required and must reference an existing appointment.
+  // - doctorId is required and must be provided.
+  // - If an ExamRecord exists for the appointment, UPDATE it (overwrite). Otherwise INSERT a new record.
+  // - After saving the exam record, set the appointment's Status = 'Completed'.
+  async createExamRecord(req, res, next) {
+    const { appointmentId, doctorId, symptoms, diagnosis, prescription, nextVisitDate } = req.body || {};
+    if (!doctorId) return res.status(400).json({ message: "doctorId is required" });
+    if (!appointmentId) return res.status(400).json({ message: "appointmentId is required" });
+
+    let tx;
+    try {
+      const pool = await getConnection();
+      tx = new sql.Transaction(pool);
+      await tx.begin();
+      const rq = new sql.Request(tx);
+
+      const aId = Number(appointmentId);
+      // verify appointment exists
+      const appt = await rq.input("AppointmentID", sql.Int, aId).query(`SELECT AppointmentID FROM dbo.Appointment WHERE AppointmentID = @AppointmentID;`);
+      if (!appt.recordset.length) {
+        await tx.rollback();
         return res.status(404).json({ message: "Appointment not found" });
       }
-      return res.json({ appointmentId: result.recordset[0].AppointmentID, status: result.recordset[0].Status });
-    } catch (err) {
-      return next(err);
-    }
-  },
 
-  async upsertExamRecord(req, res, next) {
-    const { appointmentId, doctorId, symptoms, diagnosis, prescription, nextVisitDate } = req.body || {};
-    if (!appointmentId || !doctorId) {
-      return res.status(400).json({ message: "appointmentId and doctorId are required" });
-    }
+      // check existing exam
+      const ex = await rq.input("AppointmentID2", sql.Int, aId).query(`SELECT ExamRecordID FROM dbo.ExamRecord WHERE AppointmentID = @AppointmentID2;`);
+      let examRecordId;
+      if (ex.recordset.length) {
+        examRecordId = ex.recordset[0].ExamRecordID;
+        rq.input("ExamRecordID", sql.Int, examRecordId);
+        await rq
+          .input("DoctorID", sql.Int, Number(doctorId))
+          .input("Symptoms", sql.NVarChar(sql.MAX), symptoms || null)
+          .input("Diagnosis", sql.NVarChar(sql.MAX), diagnosis || null)
+          .input("Prescription", sql.NVarChar(sql.MAX), prescription || null)
+          .input("NextVisitDate", sql.Date, nextVisitDate || null)
+          .query(`UPDATE dbo.ExamRecord SET DoctorID=@DoctorID, Symptoms=@Symptoms, Diagnosis=@Diagnosis, Prescription=@Prescription, NextVisitDate=@NextVisitDate WHERE ExamRecordID = @ExamRecordID;`);
+      } else {
+        const insertRes = await rq
+          .input("AppointmentID3", sql.Int, aId)
+          .input("DoctorID2", sql.Int, Number(doctorId))
+          .input("Symptoms2", sql.NVarChar(sql.MAX), symptoms || null)
+          .input("Diagnosis2", sql.NVarChar(sql.MAX), diagnosis || null)
+          .input("Prescription2", sql.NVarChar(sql.MAX), prescription || null)
+          .input("NextVisitDate2", sql.Date, nextVisitDate || null)
+          .query(`INSERT INTO dbo.ExamRecord (AppointmentID, DoctorID, Symptoms, Diagnosis, Prescription, NextVisitDate)
+                   VALUES (@AppointmentID3, @DoctorID2, @Symptoms2, @Diagnosis2, @Prescription2, @NextVisitDate2);
+                   SELECT SCOPE_IDENTITY() AS ExamRecordID;`);
+        examRecordId = insertRes.recordset[0].ExamRecordID;
+      }
 
-    let tx;
-    try {
-      const pool = await getConnection();
-      tx = new sql.Transaction(pool);
-      await tx.begin();
-      const rq = new sql.Request(tx);
-      rq.input("AppointmentID", sql.Int, Number(appointmentId));
-      rq.input("DoctorID", sql.Int, Number(doctorId));
-      rq.input("Symptoms", sql.NVarChar(sql.MAX), symptoms || null);
-      rq.input("Diagnosis", sql.NVarChar(sql.MAX), diagnosis || null);
-      rq.input("Prescription", sql.NVarChar(sql.MAX), prescription || null);
-      rq.input("NextVisitDate", sql.Date, nextVisitDate || null);
+      // set appointment completed
+      await rq.input("AppointmentID4", sql.Int, aId).query(`UPDATE dbo.Appointment SET [Status] = 'Completed' WHERE AppointmentID = @AppointmentID4;`);
 
-      const q = `
-  IF EXISTS (SELECT 1 FROM dbo.ExamRecord WHERE AppointmentID = @AppointmentID)
-        BEGIN
-          UPDATE ExamRecord
-          SET DoctorID = @DoctorID,
-              Symptoms = @Symptoms,
-              Diagnosis = @Diagnosis,
-              Prescription = @Prescription,
-              NextVisitDate = @NextVisitDate
-          WHERE AppointmentID = @AppointmentID;
-        END
-        ELSE
-        BEGIN
-          INSERT INTO dbo.ExamRecord (AppointmentID, DoctorID, Symptoms, Diagnosis, Prescription, NextVisitDate)
-          VALUES (@AppointmentID, @DoctorID, @Symptoms, @Diagnosis, @Prescription, @NextVisitDate);
-        END
-
-  SELECT ExamRecordID, AppointmentID, DoctorID, Symptoms, Diagnosis, Prescription, NextVisitDate
-  FROM dbo.ExamRecord
-        WHERE AppointmentID = @AppointmentID;
-      `;
-
-      const result = await rq.query(q);
       await tx.commit();
-      return res.json(result.recordset[0]);
+      return res.status(201).json({ examRecordId, appointmentId: aId });
     } catch (err) {
       try {
         if (tx) await tx.rollback();
-      } catch (_) {
-        // ignore rollback errors (demo)
-      }
-      return next(err);
-    }
-  },
-
-  async upsertVaccinationRecord(req, res, next) {
-    const {
-      appointmentId,
-      doctorId,
-      vaccineId,
-      dateGiven,
-      dose,
-      note,
-      subscriptionId,
-      packageId,
-      sequenceNo,
-    } = req.body || {};
-
-    if (!appointmentId || !doctorId || !vaccineId) {
-      return res.status(400).json({ message: "appointmentId, doctorId, vaccineId are required" });
-    }
-
-    let tx;
-    try {
-      const pool = await getConnection();
-      tx = new sql.Transaction(pool);
-      await tx.begin();
-
-      const rq = new sql.Request(tx);
-      rq.input("AppointmentID", sql.Int, Number(appointmentId));
-      rq.input("DoctorID", sql.Int, Number(doctorId));
-      rq.input("VaccineID", sql.Int, Number(vaccineId));
-      rq.input("SubscriptionID", sql.Int, subscriptionId ? Number(subscriptionId) : null);
-      rq.input("PackageID", sql.Int, packageId ? Number(packageId) : null);
-      rq.input("SequenceNo", sql.Int, sequenceNo ? Number(sequenceNo) : null);
-      rq.input("Dose", sql.NVarChar(50), dose || null);
-      rq.input("DateGiven", sql.Date, dateGiven || new Date());
-      rq.input("Note", sql.NVarChar(500), note || null);
-
-      const q = `
-  IF EXISTS (SELECT 1 FROM dbo.VaccinationRecord WHERE AppointmentID = @AppointmentID)
-        BEGIN
-          UPDATE dbo.VaccinationRecord
-          SET DoctorID = @DoctorID,
-              VaccineID = @VaccineID,
-              SubscriptionID = @SubscriptionID,
-              PackageID = @PackageID,
-              SequenceNo = @SequenceNo,
-              Dose = @Dose,
-              DateGiven = @DateGiven,
-              Note = @Note
-          WHERE AppointmentID = @AppointmentID;
-        END
-        ELSE
-        BEGIN
-          INSERT INTO dbo.VaccinationRecord
-            (AppointmentID, DoctorID, VaccineID, SubscriptionID, PackageID, SequenceNo, Dose, DateGiven, Note)
-          VALUES
-            (@AppointmentID, @DoctorID, @VaccineID, @SubscriptionID, @PackageID, @SequenceNo, @Dose, @DateGiven, @Note);
-        END
-
-        SELECT vr.VaccinationID, vr.AppointmentID, vr.DoctorID, vr.VaccineID, v.VaccineName, vr.Dose, vr.DateGiven, vr.Note,
-               vr.SubscriptionID, vr.PackageID, vr.SequenceNo
-  FROM dbo.VaccinationRecord vr
-  JOIN dbo.Vaccine v ON v.VaccineID = vr.VaccineID
-        WHERE vr.AppointmentID = @AppointmentID;
-      `;
-
-      const result = await rq.query(q);
-      await tx.commit();
-      return res.json(result.recordset[0]);
-    } catch (err) {
-      try {
-        if (tx) await tx.rollback();
-      } catch (_) {
-        // ignore rollback errors (demo)
-      }
+      } catch (_) {}
       return next(err);
     }
   },
