@@ -9,7 +9,6 @@ const AdminLayout = () => {
     { icon: "📊", label: "Dashboard", path: "/admin/dashboard" },
     { icon: "🏢", label: "Chi nhánh", path: "/admin/branches" },
     { icon: "👥", label: "Nhân viên", path: "/admin/staff" },
-    { icon: "⚙️", label: "Cài đặt", path: "/admin/settings" },
   ];
 
   const user = {
