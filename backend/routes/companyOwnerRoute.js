@@ -11,4 +11,6 @@ router.get("/branches", companyController.getBranches);
 router.post("/add-branch", companyController.addBranch);
 router.post("/add-employee", companyController.addEmployee);
 router.put("/update-branch/:branchId", companyController.updateBranch);
+router.put("/update-employee/:employeeId", companyController.updateEmployee);
+router.put("/resign-employee/:employeeId", companyController.resignEmployee);
 module.exports = router;

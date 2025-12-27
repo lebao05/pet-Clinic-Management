@@ -1,4 +1,5 @@
 const { getConnection, sql } = require("../config/database");
+const bcrypt = require("bcrypt");
 
 const getDashboard = async (req, res) => {
   try {
@@ -15,6 +16,11 @@ const getDashboard = async (req, res) => {
             -@Months + 1,
             DATEFROMPARTS(YEAR(GETDATE()), MONTH(GETDATE()), 1)
           );
+
+        /* 0. Tổng chi nhánh & nhân viên */
+        SELECT
+          (SELECT COUNT(*) FROM Branch) AS TotalBranches,
+          (SELECT COUNT(*) FROM Employee WHERE WorkStatus = 'Active') AS TotalEmployees;
 
         /* 1. Tổng doanh thu */
         SELECT 
@@ -82,12 +88,16 @@ const getDashboard = async (req, res) => {
       success: true,
       months,
       data: {
-        totalRevenue: result.recordsets[0][0],
-        revenueByBranch: result.recordsets[1],
-        topServices: result.recordsets[2],
-        petsBySpecies: result.recordsets[3],
-        membersByRank: result.recordsets[4],
-        monthlyRevenue: result.recordsets[5], // 👈 THÊM
+        summary: {
+          totalBranches: result.recordsets[0][0].TotalBranches,
+          totalEmployees: result.recordsets[0][0].TotalEmployees,
+        },
+        totalRevenue: result.recordsets[1][0],
+        revenueByBranch: result.recordsets[2],
+        topServices: result.recordsets[3],
+        petsBySpecies: result.recordsets[4],
+        membersByRank: result.recordsets[5],
+        monthlyRevenue: result.recordsets[6],
       },
     });
   } catch (err) {
@@ -95,10 +105,11 @@ const getDashboard = async (req, res) => {
     res.status(500).json({
       success: false,
       message: "Failed to load dashboard data",
-      err: err.message,
+      error: err.message,
     });
   }
 };
+
 const getBranchSummary = async (req, res) => {
   try {
     const pool = await getConnection();
@@ -107,29 +118,43 @@ const getBranchSummary = async (req, res) => {
       SELECT
         b.BranchID,
         b.BranchName,
-        b.City,
         b.Address,
         b.Phone,
         b.OpenTime,
         b.CloseTime,
-        m.FullName AS ManagerName,
+
+        /* ===== MANAGER ===== */
+        m.EmployeeID   AS ManagerID,
+        m.FullName     AS ManagerName,
+
+        /* ===== TOTAL EMPLOYEES (exclude manager) ===== */
         COUNT(DISTINCT ea.EmployeeID) AS TotalEmployees
+
       FROM Branch b
-      LEFT JOIN Employee m 
+
+      /* 🔥 Manager by ManagerID */
+      LEFT JOIN Employee m
         ON b.ManagerID = m.EmployeeID
+        AND m.WorkStatus = 'Active'
+
+      /* 🔥 Active employees in branch */
       LEFT JOIN EmployeeAssignment ea
         ON b.BranchID = ea.BranchID
-        AND ea.EndDate IS NULL
+        AND ea.StartDate <= CAST(GETDATE() AS DATE)
+        AND (ea.EndDate IS NULL OR ea.EndDate >= CAST(GETDATE() AS DATE))
+        AND ea.EmployeeID <> b.ManagerID   -- ❗ exclude manager
+
       GROUP BY
         b.BranchID,
         b.BranchName,
-        b.City,
         b.Address,
         b.Phone,
         b.OpenTime,
         b.CloseTime,
+        m.EmployeeID,
         m.FullName
-      ORDER BY b.BranchName
+
+      ORDER BY b.BranchName;
     `);
 
     res.json({
@@ -137,14 +162,17 @@ const getBranchSummary = async (req, res) => {
       count: result.recordset.length,
       data: result.recordset,
     });
+
   } catch (err) {
     console.error("Branch summary error:", err);
     res.status(500).json({
       success: false,
       message: "Failed to load branch summary",
+      error: err.message,
     });
   }
 };
+
 const getEmployees = async (req, res) => {
   try {
     const pool = await getConnection();
@@ -152,7 +180,6 @@ const getEmployees = async (req, res) => {
     const {
       role,
       branchId,
-      workingStatus, // active | inactive
       page = 1,
       pageSize = 10,
     } = req.query;
@@ -171,20 +198,14 @@ const getEmployees = async (req, res) => {
     }
 
     if (branchId) {
-      whereClause += " AND cb.BranchID = @BranchID";
+      whereClause += " AND ca.BranchID = @BranchID";
       request.input("BranchID", sql.Int, branchId);
     }
 
-    if (workingStatus === "active") {
-      whereClause += " AND ca.AssignmentID IS NOT NULL";
-    }
-
-    if (workingStatus === "inactive") {
-      whereClause += " AND ca.AssignmentID IS NULL";
-    }
-
     const query = `
-      /* ===== DATA ===== */
+      /* =======================
+         1️⃣ DATA
+      ======================= */
       SELECT
         e.EmployeeID,
         e.FullName,
@@ -195,9 +216,9 @@ const getEmployees = async (req, res) => {
         e.BaseSalary,
         e.WorkStatus,
 
-        cb.BranchID,
-        cb.BranchName,
-        cb.City,
+        ca.BranchID,
+        b.BranchName,
+        b.City,
 
         CASE
           WHEN ca.AssignmentID IS NULL
@@ -205,11 +226,11 @@ const getEmployees = async (req, res) => {
           ELSE N'Đang làm việc'
         END AS WorkingStatus,
 
-        /* ===== FULL HISTORY ===== */
+        /* ===== Assignment History ===== */
         (
           SELECT
             ea2.AssignmentID,
-            b2.BranchID,
+            ea2.BranchID,
             b2.BranchName,
             ea2.StartDate,
             ea2.EndDate
@@ -222,35 +243,41 @@ const getEmployees = async (req, res) => {
 
       FROM Employee e
 
-      /* 🔥 current assignment by TIME */
-      LEFT JOIN EmployeeAssignment ca
-        ON e.EmployeeID = ca.EmployeeID
-        AND ca.StartDate <= CAST(GETDATE() AS DATE)
-        AND (ca.EndDate IS NULL OR ca.EndDate >= CAST(GETDATE() AS DATE))
+      /* 🔥 ONLY 1 ACTIVE ASSIGNMENT */
+      OUTER APPLY (
+        SELECT TOP 1 *
+        FROM EmployeeAssignment ea
+        WHERE ea.EmployeeID = e.EmployeeID
+          AND ea.StartDate <= CAST(GETDATE() AS DATE)
+          AND (ea.EndDate IS NULL OR ea.EndDate >= CAST(GETDATE() AS DATE))
+        ORDER BY ea.StartDate DESC
+      ) ca
 
-      LEFT JOIN Branch cb
-        ON ca.BranchID = cb.BranchID
+      LEFT JOIN Branch b ON ca.BranchID = b.BranchID
 
       ${whereClause}
       ORDER BY e.FullName
       OFFSET @Offset ROWS
       FETCH NEXT @PageSize ROWS ONLY;
 
-      /* ===== COUNT ===== */
+      /* =======================
+         2️⃣ COUNT
+      ======================= */
       SELECT COUNT(*) AS Total
       FROM Employee e
-      LEFT JOIN EmployeeAssignment ca
-        ON e.EmployeeID = ca.EmployeeID
-        AND ca.StartDate <= CAST(GETDATE() AS DATE)
-        AND (ca.EndDate IS NULL OR ca.EndDate >= CAST(GETDATE() AS DATE))
-      LEFT JOIN Branch cb
-        ON ca.BranchID = cb.BranchID
+      OUTER APPLY (
+        SELECT TOP 1 *
+        FROM EmployeeAssignment ea
+        WHERE ea.EmployeeID = e.EmployeeID
+          AND ea.StartDate <= CAST(GETDATE() AS DATE)
+          AND (ea.EndDate IS NULL OR ea.EndDate >= CAST(GETDATE() AS DATE))
+        ORDER BY ea.StartDate DESC
+      ) ca
       ${whereClause};
     `;
 
     const result = await request.query(query);
 
-    // parse JSON history
     const data = result.recordsets[0].map(e => ({
       ...e,
       AssignmentHistory: e.AssignmentHistory
@@ -270,6 +297,7 @@ const getEmployees = async (req, res) => {
       },
       data,
     });
+
   } catch (err) {
     console.error("Get employees error:", err);
     res.status(500).json({
@@ -386,120 +414,75 @@ const addEmployee = async (req, res) => {
       fullName,
       gender,
       dateOfBirth,
-      hireDate,
       role,
       baseSalary,
       branchId,
-      startDate,
     } = req.body;
 
-    await transaction.begin();
+    // Kiểm tra các trường bắt buộc
+    if (!fullName || !role || !branchId) {
+      return res.status(400).json({ success: false, message: "Missing required fields" });
+    }
 
+    await transaction.begin();
     const request = new sql.Request(transaction);
 
-    /* =====================================================
-       1️⃣ CHECK MANAGER EXISTENCE (if role = Manager)
-    ===================================================== */
+    /* 1. CHECK MANAGER EXISTENCE (Nếu là Manager) */
     if (role === "Manager") {
-      const checkManagerQuery = `
-        SELECT TOP 1 e.EmployeeID
-        FROM Employee e
+      const checkQuery = `
+        SELECT 1 FROM Employee e 
         JOIN EmployeeAssignment ea ON e.EmployeeID = ea.EmployeeID
-        WHERE e.Role = 'Manager'
-          AND ea.BranchID = @BranchID
-          AND ea.StartDate <= CAST(GETDATE() AS DATE)
-          AND (ea.EndDate IS NULL OR ea.EndDate >= CAST(GETDATE() AS DATE));
+        WHERE e.Role = 'Manager' AND ea.BranchID = @BranchID
+        AND (ea.EndDate IS NULL OR ea.EndDate >= CAST(GETDATE() AS DATE))
       `;
-
       const check = await request
         .input("BranchID", sql.Int, branchId)
-        .query(checkManagerQuery);
-
+        .query(checkQuery);
       if (check.recordset.length > 0) {
         await transaction.rollback();
-        return res.status(400).json({
-          success: false,
-          message: "Branch already has a manager",
-        });
+        return res.status(400).json({ success: false, message: "Branch already has a manager" });
       }
     }
 
-    /* =====================================================
-       2️⃣ INSERT EMPLOYEE
-    ===================================================== */
-    const insertEmployeeQuery = `
-      INSERT INTO Employee (
-        FullName,
-        Gender,
-        DateOfBirth,
-        HireDate,
-        Role,
-        BaseSalary,
-        WorkStatus
-      )
+    /* 2. HASH PASSWORD */
+    const passwordHash = await bcrypt.hash("12345678", 10);
+
+    /* 3. INSERT EMPLOYEE (Sử dụng GETDATE() cho HireDate) */
+    const insertEmp = `
+      INSERT INTO Employee (FullName, Gender, DateOfBirth, HireDate, Role, BaseSalary, PasswordHash, WorkStatus)
       OUTPUT INSERTED.EmployeeID
-      VALUES (
-        @FullName,
-        @Gender,
-        @DateOfBirth,
-        @HireDate,
-        @Role,
-        @BaseSalary,
-        N'Active'
-      );
+      VALUES (@FullName, @Gender, @DateOfBirth, GETDATE(), @Role, @BaseSalary, @PasswordHash, N'Active');
     `;
 
-    const employeeResult = await request
+    const empRes = await new sql.Request(transaction)
       .input("FullName", sql.NVarChar, fullName)
-      .input("Gender", sql.NVarChar, gender)
-      .input("DateOfBirth", sql.Date, dateOfBirth)
-      .input("HireDate", sql.Date, hireDate)
+      .input("Gender", sql.NVarChar, gender || null)
+      .input("DateOfBirth", sql.Date, dateOfBirth || null)
       .input("Role", sql.NVarChar, role)
-      .input("BaseSalary", sql.Decimal(18, 2), baseSalary)
-      .query(insertEmployeeQuery);
+      .input("BaseSalary", sql.Decimal(18, 2), baseSalary || 0)
+      .input("PasswordHash", sql.NVarChar, passwordHash)
+      .query(insertEmp);
 
-    const employeeId = employeeResult.recordset[0].EmployeeID;
+    const employeeId = empRes.recordset[0].EmployeeID;
 
-    /* =====================================================
-       3️⃣ ASSIGN TO BRANCH
-    ===================================================== */
-    const assignQuery = `
-      INSERT INTO EmployeeAssignment (
-        EmployeeID,
-        BranchID,
-        StartDate
-      )
-      VALUES (
-        @EmployeeID,
-        @BranchID,
-        @StartDate
-      );
-    `;
-
-    await request
-      .input("EmployeeID", sql.Int, employeeId)
-      .input("StartDate", sql.Date, startDate)
-      .query(assignQuery);
+    /* 4. ASSIGN TO BRANCH (Sửa lỗi khai báo biến @BranchID và dùng GETDATE() cho StartDate) */
+    await new sql.Request(transaction)
+      .input("EmpID", sql.Int, employeeId)
+      .input("BId", sql.Int, branchId)
+      .query(`
+        INSERT INTO EmployeeAssignment (EmployeeID, BranchID, StartDate)
+        VALUES (@EmpID, @BId, CAST(GETDATE() AS DATE))
+      `);
 
     await transaction.commit();
+    res.status(201).json({ success: true, message: "Employee added successfully", employeeId });
 
-    res.status(201).json({
-      success: true,
-      message: "Employee added successfully",
-      data: {
-        employeeId,
-      },
-    });
   } catch (err) {
-    await transaction.rollback();
-    console.error("Add employee error:", err);
-    res.status(500).json({
-      success: false,
-      message: "Failed to add employee",
-      error: err.message,
-    });
+    if (transaction) await transaction.rollback();
+    res.status(500).json({ success: false, error: err.message });
   }
 };
+
 const addBranch = async (req, res) => {
   try {
     const pool = await getConnection();
@@ -594,7 +577,7 @@ const updateBranch = async (req, res) => {
     openTime,
     closeTime,
   } = req.body;
-  
+
   if (!branchId) {
     return res.status(400).json({
       success: false,
@@ -677,6 +660,199 @@ const updateBranch = async (req, res) => {
     });
   }
 };
+const updateEmployee = async (req, res) => {
+  const { employeeId } = req.params;
+  const {
+    fullName,
+    gender,
+    dateOfBirth,
+    role,
+    baseSalary,
+  } = req.body;
+
+  if (!employeeId) {
+    return res.status(400).json({
+      success: false,
+      message: "employeeId is required",
+    });
+  }
+
+  try {
+    const pool = await getConnection();
+    const request = pool.request();
+
+    /* ===============================
+       1️⃣ CHECK EMPLOYEE EXIST
+    =============================== */
+    const empCheck = await request
+      .input("EmployeeID", sql.Int, employeeId)
+      .query(`
+        SELECT 1
+        FROM Employee
+        WHERE EmployeeID = @EmployeeID
+      `);
+
+    if (empCheck.recordset.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "Employee not found",
+      });
+    }
+
+    /* ===============================
+       2️⃣ CHECK MANAGER CONFLICT
+       - chỉ check nếu role = Manager
+       - KHÔNG cần branchId
+    =============================== */
+    if (role === "Manager") {
+      const conflict = await request
+        .input("EmpID", sql.Int, employeeId)
+        .query(`
+          SELECT 1
+          FROM EmployeeAssignment ea
+          JOIN Employee e ON ea.EmployeeID = e.EmployeeID
+          WHERE ea.BranchID IN (
+            SELECT BranchID
+            FROM EmployeeAssignment
+            WHERE EmployeeID = @EmpID
+              AND (EndDate IS NULL OR EndDate >= CAST(GETDATE() AS DATE))
+          )
+          AND e.Role = 'Manager'
+          AND e.EmployeeID <> @EmpID
+          AND (ea.EndDate IS NULL OR ea.EndDate >= CAST(GETDATE() AS DATE))
+        `);
+
+      if (conflict.recordset.length > 0) {
+        return res.status(400).json({
+          success: false,
+          message: "This branch already has a manager",
+        });
+      }
+    }
+
+    /* ===============================
+       3️⃣ UPDATE EMPLOYEE
+    =============================== */
+    await request
+      .input("FullName", sql.NVarChar, fullName ?? null)
+      .input("Gender", sql.NVarChar, gender ?? null)
+      .input("DateOfBirth", sql.Date, dateOfBirth ?? null)
+      .input("Role", sql.NVarChar, role ?? null)
+      .input("BaseSalary", sql.Decimal(18, 2), baseSalary ?? null)
+      .query(`
+        UPDATE Employee
+        SET
+          FullName    = COALESCE(@FullName, FullName),
+          Gender      = COALESCE(@Gender, Gender),
+          DateOfBirth = COALESCE(@DateOfBirth, DateOfBirth),
+          Role        = COALESCE(@Role, Role),
+          BaseSalary  = COALESCE(@BaseSalary, BaseSalary)
+        WHERE EmployeeID = @EmployeeID
+      `);
+
+    res.json({
+      success: true,
+      message: "Employee updated successfully",
+    });
+
+  } catch (err) {
+    console.error("Update employee error:", err);
+    res.status(500).json({
+      success: false,
+      message: "Failed to update employee",
+      error: err.message,
+    });
+  }
+};
+const resignEmployee = async (req, res) => {
+  const { employeeId } = req.params;
+
+  if (!employeeId) {
+    return res.status(400).json({
+      success: false,
+      message: "employeeId is required",
+    });
+  }
+
+  const pool = await getConnection();
+  const transaction = new sql.Transaction(pool);
+
+  try {
+    await transaction.begin();
+    const request = new sql.Request(transaction);
+
+    /* ===============================
+       1️⃣ CHECK EMPLOYEE EXIST
+    =============================== */
+    const empResult = await request
+      .input("EmployeeID", sql.Int, employeeId)
+      .query(`
+        SELECT EmployeeID, Role
+        FROM Employee
+        WHERE EmployeeID = @EmployeeID
+      `);
+
+    if (empResult.recordset.length === 0) {
+      await transaction.rollback();
+      return res.status(404).json({
+        success: false,
+        message: "Employee not found",
+      });
+    }
+
+    const employee = empResult.recordset[0];
+
+    /* ===============================
+       2️⃣ IF MANAGER → REMOVE FROM BRANCH
+    =============================== */
+    if (employee.Role === "Manager") {
+      await request
+        .input("ManagerID", sql.Int, employeeId)
+        .query(`
+          UPDATE Branch
+          SET ManagerID = NULL
+          WHERE ManagerID = @ManagerID
+        `);
+    }
+
+    /* ===============================
+       3️⃣ END CURRENT ASSIGNMENT
+    =============================== */
+    await request
+      .query(`
+        UPDATE EmployeeAssignment
+        SET EndDate = DATEADD(DAY, -1, CAST(GETDATE() AS DATE))
+        WHERE EmployeeID = ${employeeId}
+          AND EndDate IS NULL
+      `);
+
+    /* ===============================
+       4️⃣ UPDATE WORK STATUS
+    =============================== */
+    await request
+      .query(`
+        UPDATE Employee
+        SET WorkStatus = 'Inactive'
+        WHERE EmployeeID = ${employeeId}
+      `);
+
+    await transaction.commit();
+
+    res.json({
+      success: true,
+      message: "Employee resigned successfully",
+    });
+  } catch (err) {
+    await transaction.rollback();
+    console.error("Resign employee error:", err);
+    res.status(500).json({
+      success: false,
+      message: "Failed to resign employee",
+      error: err.message,
+    });
+  }
+};
+
 
 module.exports = {
   getDashboard,
@@ -688,4 +864,6 @@ module.exports = {
   addEmployee,
   addBranch,
   updateBranch,
+  updateEmployee, 
+  resignEmployee
 };

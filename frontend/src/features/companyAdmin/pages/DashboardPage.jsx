@@ -96,12 +96,12 @@ export default function DashboardPage() {
             },
             {
                 title: "Tổng Nhân Viên",
-                value: "156", // Note: API response doesn't provide this, keeping static or assume 0
+                value: dashboardData.summary?.totalEmployees || 0,
                 icon: Users,
             },
             {
                 title: "Số Chi Nhánh",
-                value: dashboardData.revenueByBranch?.length || 0,
+                value: dashboardData.summary?.totalBranches || 0,
                 icon: Building2,
             },
             {
