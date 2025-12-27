@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { Card } from "../../../shared/components/ui/Card";
 import Button from "../../../shared/components/ui/Button";
 import { branchManagerApi } from "../../../api/branchManagerApi";
+import { RefreshCw, Package, AlertTriangle, XCircle, DollarSign } from "lucide-react";
 
 function getDefaultBranchId() {
   const v = localStorage.getItem("branchId");
@@ -14,6 +15,7 @@ export default function InventoryPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
+  // ==================== STATS ====================
   const stats = useMemo(() => {
     const totalProducts = items.length;
     const lowStock = items.filter((x) => Number(x.StockQty) < 10 && x.IsActive).length;
@@ -22,6 +24,7 @@ export default function InventoryPage() {
     return { totalProducts, lowStock, outStock, totalValue };
   }, [items]);
 
+  // ==================== LOAD DATA ====================
   async function load() {
     try {
       setLoading(true);
@@ -45,6 +48,7 @@ export default function InventoryPage() {
     load();
   }
 
+  // ==================== UPDATE ROW ====================
   function setRow(idx, patch) {
     setItems((prev) => prev.map((x, i) => (i === idx ? { ...x, ...patch } : x)));
   }
@@ -65,6 +69,7 @@ export default function InventoryPage() {
     }
   }
 
+  // ==================== STATUS HELPER ====================
   const getStatus = (x) => {
     if (!x.IsActive) return { label: "Inactive", cls: "bg-neutral-100 text-neutral-700" };
     if (Number(x.StockQty) === 0) return { label: "Out of Stock", cls: "bg-danger-100 text-danger-700" };
@@ -74,116 +79,198 @@ export default function InventoryPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-start justify-between gap-4 flex-wrap">
+      {/* Header */}
+      <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-neutral-900 mb-2">Inventory Management</h1>
-          <p className="text-neutral-600">Track and manage stock per branch.</p>
+          <h1 className="text-2xl font-bold text-neutral-900">Inventory Management</h1>
+          <p className="text-sm text-neutral-600 mt-1">Track and manage stock per branch.</p>
         </div>
-        <div className="flex items-center gap-2">
-          <input
-            className="w-28 px-3 py-2 border rounded-lg"
-            type="number"
-            min={1}
-            value={branchId}
-            onChange={(e) => setBranchId(Number(e.target.value))}
-          />
-          <Button onClick={saveBranch}>Set Branch</Button>
-        </div>
+
+        <Button onClick={load} variant="outline" disabled={loading}>
+          <RefreshCw className={`w-4 h-4 mr-2 ${loading ? "animate-spin" : ""}`} />
+          Refresh
+        </Button>
       </div>
 
-      {error && <p className="text-sm text-danger-600">{error}</p>}
+      {/* Error Alert */}
+      {error && (
+        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg">
+          <strong className="font-medium">Error: </strong>
+          <span>{error}</span>
+        </div>
+      )}
 
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card>
-          <p className="text-sm text-neutral-600 mb-1">Total Products</p>
-          <p className="text-3xl font-bold text-neutral-900">{stats.totalProducts}</p>
+      {/* Testing Controls - Collapsible */}
+      <details className="bg-neutral-50 border border-neutral-200 rounded-lg p-4">
+        <summary className="cursor-pointer font-medium text-neutral-700 text-sm">
+          🔧 Testing Controls (Click to expand)
+        </summary>
+        <div className="flex gap-4 items-end mt-4">
+          <div className="flex-1">
+            <label className="block text-sm font-medium text-neutral-700 mb-1">Branch ID (for testing)</label>
+            <input
+              type="number"
+              value={branchId}
+              onChange={(e) => setBranchId(Number(e.target.value))}
+              className="w-full px-3 py-2 border border-neutral-300 rounded-lg"
+            />
+          </div>
+          <Button onClick={saveBranch} variant="primary">
+            Load Data
+          </Button>
+        </div>
+        <div className="mt-2 text-xs text-neutral-600 bg-blue-50 p-2 rounded border border-blue-200">
+          💡 <strong>Tip:</strong> Change Branch ID to test different branches (1, 2, 3, etc.)
+        </div>
+      </details>
+
+      {/* Stats Grid */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <Card className="p-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm text-neutral-600">Total Products</p>
+              <p className="text-2xl font-bold text-neutral-900 mt-1">{stats.totalProducts}</p>
+            </div>
+            <div className="p-3 rounded-lg bg-blue-50 text-blue-600">
+              <Package className="w-6 h-6" />
+            </div>
+          </div>
         </Card>
-        <Card>
-          <p className="text-sm text-neutral-600 mb-1">Low Stock</p>
-          <p className="text-3xl font-bold text-warning-600">{stats.lowStock}</p>
+
+        <Card className="p-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm text-neutral-600">Low Stock</p>
+              <p className="text-2xl font-bold text-yellow-600 mt-1">{stats.lowStock}</p>
+            </div>
+            <div className="p-3 rounded-lg bg-yellow-50 text-yellow-600">
+              <AlertTriangle className="w-6 h-6" />
+            </div>
+          </div>
         </Card>
-        <Card>
-          <p className="text-sm text-neutral-600 mb-1">Out of Stock</p>
-          <p className="text-3xl font-bold text-danger-600">{stats.outStock}</p>
+
+        <Card className="p-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm text-neutral-600">Out of Stock</p>
+              <p className="text-2xl font-bold text-red-600 mt-1">{stats.outStock}</p>
+            </div>
+            <div className="p-3 rounded-lg bg-red-50 text-red-600">
+              <XCircle className="w-6 h-6" />
+            </div>
+          </div>
         </Card>
-        <Card>
-          <p className="text-sm text-neutral-600 mb-1">Total Value</p>
-          <p className="text-3xl font-bold text-success-600">
-            {stats.totalValue.toLocaleString(undefined, { maximumFractionDigits: 2 })}
-          </p>
+
+        <Card className="p-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm text-neutral-600">Total Value</p>
+              <p className="text-2xl font-bold text-green-600 mt-1">{(stats.totalValue / 1000000).toFixed(1)}M</p>
+            </div>
+            <div className="p-3 rounded-lg bg-green-50 text-green-600">
+              <DollarSign className="w-6 h-6" />
+            </div>
+          </div>
         </Card>
       </div>
 
+      {/* Info Alert */}
+      <div className="bg-blue-50 border border-blue-200 text-blue-700 px-4 py-3 rounded-lg text-sm">
+        ℹ️ Low stock threshold is &lt; 10 units. Items marked as "Inactive" won't appear in sales.
+      </div>
+
+      {/* Inventory Table */}
       <Card>
-        <div className="flex items-center gap-3 flex-wrap">
-          <Button onClick={load} disabled={loading}>{loading ? "Loading..." : "Refresh"}</Button>
-          <p className="text-sm text-neutral-600">Low stock threshold is &lt; 10.</p>
-        </div>
-      </Card>
-
-      <Card className="overflow-hidden p-0">
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead>
-              <tr className="bg-neutral-50 border-b border-neutral-200">
-                <th className="px-6 py-4 text-left text-sm font-semibold text-neutral-700">Product</th>
-                <th className="px-6 py-4 text-left text-sm font-semibold text-neutral-700">Type</th>
-                <th className="px-6 py-4 text-center text-sm font-semibold text-neutral-700">Stock</th>
-                <th className="px-6 py-4 text-right text-sm font-semibold text-neutral-700">Selling Price</th>
-                <th className="px-6 py-4 text-center text-sm font-semibold text-neutral-700">Status</th>
-                <th className="px-6 py-4 text-center text-sm font-semibold text-neutral-700">Active</th>
-                <th className="px-6 py-4 text-center text-sm font-semibold text-neutral-700">Actions</th>
+              <tr className="border-b border-neutral-200 bg-neutral-50">
+                <th className="px-4 py-3 text-left text-xs font-medium text-neutral-700 uppercase">Product</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-neutral-700 uppercase">Type</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-neutral-700 uppercase">Stock</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-neutral-700 uppercase">Selling Price</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-neutral-700 uppercase">Status</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-neutral-700 uppercase">Active</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-neutral-700 uppercase">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-neutral-200">
-              {items.map((item, idx) => {
-                const st = getStatus(item);
-                return (
-                  <tr key={`${item.BranchID}-${item.ProductID}`} className="hover:bg-neutral-50 transition">
-                    <td className="px-6 py-4">
-                      <div className="font-medium text-neutral-900">{item.ProductName}</div>
-                      <div className="text-sm text-neutral-600">#{item.ProductID}</div>
-                    </td>
-                    <td className="px-6 py-4 text-neutral-700">{item.ProductType}</td>
-                    <td className="px-6 py-4 text-center">
-                      <input
-                        className="w-24 text-center px-3 py-2 border rounded-lg"
-                        type="number"
-                        min={0}
-                        value={item.StockQty}
-                        onChange={(e) => setRow(idx, { StockQty: e.target.value })}
-                      />
-                    </td>
-                    <td className="px-6 py-4 text-right">
-                      <input
-                        className="w-32 text-right px-3 py-2 border rounded-lg"
-                        type="number"
-                        step="0.01"
-                        min={0}
-                        value={item.SellingPrice}
-                        onChange={(e) => setRow(idx, { SellingPrice: e.target.value })}
-                      />
-                    </td>
-                    <td className="px-6 py-4 text-center">
-                      <span className={`px-3 py-1 rounded-full text-xs font-medium ${st.cls}`}>{st.label}</span>
-                    </td>
-                    <td className="px-6 py-4 text-center">
-                      <input type="checkbox" checked={!!item.IsActive} onChange={(e) => setRow(idx, { IsActive: e.target.checked })} />
-                    </td>
-                    <td className="px-6 py-4 text-center">
-                      <Button onClick={() => saveRow(item)}>Save</Button>
-                    </td>
-                  </tr>
-                );
-              })}
-              {!items.length && !loading && (
+              {loading ? (
                 <tr>
-                  <td className="px-6 py-8 text-center text-neutral-600" colSpan={7}>No inventory items found for this branch.</td>
+                  <td colSpan={7} className="px-4 py-8 text-center text-neutral-500">
+                    <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2" />
+                    Loading inventory...
+                  </td>
                 </tr>
+              ) : items.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="px-4 py-8 text-center text-neutral-500">
+                    No inventory items found for this branch.
+                  </td>
+                </tr>
+              ) : (
+                items.map((item, idx) => {
+                  const st = getStatus(item);
+                  return (
+                    <tr key={item.ProductID} className="hover:bg-neutral-50 transition-colors">
+                      <td className="px-4 py-3">
+                        <div className="text-sm font-medium text-neutral-900">{item.ProductName}</div>
+                        <div className="text-xs text-neutral-500">#{item.ProductID}</div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-neutral-100 text-neutral-700">
+                          {item.ProductType}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <input
+                          type="number"
+                          value={item.StockQty}
+                          onChange={(e) => setRow(idx, { StockQty: e.target.value })}
+                          className="w-20 px-2 py-1 border border-neutral-300 rounded text-sm"
+                        />
+                      </td>
+                      <td className="px-4 py-3">
+                        <input
+                          type="number"
+                          value={item.SellingPrice}
+                          onChange={(e) => setRow(idx, { SellingPrice: e.target.value })}
+                          className="w-28 px-2 py-1 border border-neutral-300 rounded text-sm"
+                        />
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${st.cls}`}>
+                          {st.label}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <input
+                          type="checkbox"
+                          checked={item.IsActive}
+                          onChange={(e) => setRow(idx, { IsActive: e.target.checked })}
+                          className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
+                        />
+                      </td>
+                      <td className="px-4 py-3">
+                        <Button variant="primary" size="sm" onClick={() => saveRow(item)}>
+                          Save
+                        </Button>
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>
         </div>
+
+        {/* Footer */}
+        {!loading && items.length > 0 && (
+          <div className="px-4 py-3 border-t border-neutral-200 bg-neutral-50 text-sm text-neutral-600">
+            Total: {items.length} products | Low Stock: {stats.lowStock} | Out of Stock: {stats.outStock}
+          </div>
+        )}
       </Card>
     </div>
   );

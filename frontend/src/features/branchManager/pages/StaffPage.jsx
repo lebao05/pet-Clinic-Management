@@ -1,7 +1,8 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import { Card } from "../../../shared/components/ui/Card";
 import Button from "../../../shared/components/ui/Button";
 import { branchManagerApi } from "../../../api/branchManagerApi";
+import { UserPlus, UserMinus, AlertCircle, Search, RefreshCw } from "lucide-react";
 
 function getDefaultBranchId() {
   const v = localStorage.getItem("branchId");
@@ -19,14 +20,29 @@ function dateISO(d) {
 export default function StaffPage() {
   const [branchId, setBranchId] = useState(getDefaultBranchId());
   const [date, setDate] = useState(dateISO(new Date()));
-
   const [staff, setStaff] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
 
   const [newEmployeeId, setNewEmployeeId] = useState("");
   const [newStartDate, setNewStartDate] = useState(dateISO(new Date()));
 
+  // ==================== FILTERED STAFF ====================
+  const filteredStaff = useMemo(() => {
+    if (!searchQuery.trim()) return staff;
+
+    const query = searchQuery.toLowerCase();
+    return staff.filter(
+      (s) =>
+        s.FullName?.toLowerCase().includes(query) ||
+        String(s.EmployeeID).includes(query) ||
+        s.Role?.toLowerCase().includes(query) ||
+        s.WorkStatus?.toLowerCase().includes(query)
+    );
+  }, [staff, searchQuery]);
+
+  // ==================== LOAD DATA ====================
   async function load() {
     try {
       setLoading(true);
@@ -50,7 +66,13 @@ export default function StaffPage() {
     load();
   }
 
+  // ==================== CREATE ASSIGNMENT ====================
   async function createAssignment() {
+    if (!newEmployeeId) {
+      setError("Please enter Employee ID");
+      return;
+    }
+
     try {
       setError("");
       await branchManagerApi.createAssignment({
@@ -65,7 +87,12 @@ export default function StaffPage() {
     }
   }
 
-  async function endAssignment(assignmentId) {
+  // ==================== END ASSIGNMENT ====================
+  async function endAssignment(assignmentId, employeeName) {
+    const confirmed = window.confirm(`Are you sure you want to end the assignment for ${employeeName}?`);
+
+    if (!confirmed) return;
+
     try {
       setError("");
       await branchManagerApi.endAssignment(assignmentId, dateISO(new Date()));
@@ -77,95 +104,232 @@ export default function StaffPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-start justify-between gap-4 flex-wrap">
+      {/* Header */}
+      <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-neutral-900 mb-2">Staff (Branch Assignment)</h1>
-          <p className="text-neutral-600">View active staff in a branch, and manage assignment history.</p>
+          <h1 className="text-2xl font-bold text-neutral-900">Staff Management</h1>
+          <p className="text-sm text-neutral-600 mt-1">View active staff in a branch, and manage assignment history.</p>
         </div>
-        <div className="flex items-center gap-2">
-          <input
-            className="w-28 px-3 py-2 border rounded-lg"
-            type="number"
-            min={1}
-            value={branchId}
-            onChange={(e) => setBranchId(Number(e.target.value))}
-          />
-          <Button onClick={saveBranch}>Set Branch</Button>
-        </div>
+
+        <Button onClick={load} variant="outline" disabled={loading}>
+          <RefreshCw className={`w-4 h-4 mr-2 ${loading ? "animate-spin" : ""}`} />
+          Refresh
+        </Button>
       </div>
 
-      {error && <p className="text-sm text-danger-600">{error}</p>}
-
-      <Card>
-        <div className="flex gap-3 flex-wrap items-end">
-          <div>
-            <label className="block text-sm text-neutral-600 mb-1">As of date</label>
-            <input className="px-3 py-2 border rounded-lg" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
-          </div>
-          <Button onClick={load} disabled={loading}>{loading ? "Loading..." : "Refresh"}</Button>
+      {/* Error Alert */}
+      {error && (
+        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg flex items-start">
+          <AlertCircle className="w-5 h-5 mr-2 flex-shrink-0 mt-0.5" />
+          <span>{error}</span>
         </div>
-      </Card>
+      )}
 
-      <Card>
-        <h3 className="text-lg font-bold text-neutral-900 mb-4">Assign Employee to this Branch</h3>
-        <div className="flex gap-3 flex-wrap items-end">
+      {/* Filters - Hidden Branch ID Input (for testing only) */}
+      <details className="bg-neutral-50 border border-neutral-200 rounded-lg p-4">
+        <summary className="cursor-pointer font-medium text-neutral-700 text-sm">
+          🔧 Testing Controls (Click to expand)
+        </summary>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
           <div>
-            <label className="block text-sm text-neutral-600 mb-1">EmployeeID</label>
+            <label className="block text-sm font-medium text-neutral-700 mb-1">Branch ID (for testing)</label>
             <input
-              className="w-40 px-3 py-2 border rounded-lg"
               type="number"
-              value={newEmployeeId}
-              onChange={(e) => setNewEmployeeId(e.target.value)}
-              placeholder="e.g. 12"
+              value={branchId}
+              onChange={(e) => setBranchId(Number(e.target.value))}
+              className="w-full px-3 py-2 border border-neutral-300 rounded-lg"
             />
           </div>
           <div>
-            <label className="block text-sm text-neutral-600 mb-1">StartDate</label>
-            <input className="px-3 py-2 border rounded-lg" type="date" value={newStartDate} onChange={(e) => setNewStartDate(e.target.value)} />
+            <label className="block text-sm font-medium text-neutral-700 mb-1">Date</label>
+            <input
+              type="date"
+              value={date}
+              onChange={(e) => setDate(e.target.value)}
+              className="w-full px-3 py-2 border border-neutral-300 rounded-lg"
+            />
           </div>
-          <Button onClick={createAssignment} disabled={!newEmployeeId}>Create Assignment</Button>
-          <p className="text-sm text-neutral-600">Tip: Manager can assign Doctor / Cashier / Receptionist by EmployeeID.</p>
+          <div className="flex items-end">
+            <Button onClick={saveBranch} variant="primary" className="w-full">
+              Load Data
+            </Button>
+          </div>
         </div>
+        <div className="mt-2 text-xs text-neutral-600 bg-blue-50 p-2 rounded border border-blue-200">
+          💡 <strong>Tip:</strong> Change Branch ID to test different branches (1, 2, 3, etc.)
+        </div>
+      </details>
+
+      {/* Add New Assignment */}
+      <Card className="p-4 bg-blue-50 border-blue-200">
+        <h3 className="text-sm font-semibold text-neutral-900 mb-3 flex items-center">
+          <UserPlus className="w-4 h-4 mr-2" />
+          Assign New Employee
+        </h3>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-neutral-700 mb-1">Employee ID *</label>
+            <input
+              type="number"
+              value={newEmployeeId}
+              onChange={(e) => setNewEmployeeId(e.target.value)}
+              placeholder="Enter Employee ID"
+              className="w-full px-3 py-2 border border-neutral-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-neutral-700 mb-1">Start Date *</label>
+            <input
+              type="date"
+              value={newStartDate}
+              onChange={(e) => setNewStartDate(e.target.value)}
+              className="w-full px-3 py-2 border border-neutral-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+          <div className="flex items-end">
+            <Button onClick={createAssignment} variant="primary" className="w-full" disabled={!newEmployeeId}>
+              <UserPlus className="w-4 h-4 mr-2" />
+              Assign Employee
+            </Button>
+          </div>
+        </div>
+        <p className="text-xs text-neutral-600 mt-2">
+          💡 Tip: You can assign Doctors, Cashiers, or Receptionists by their Employee ID
+        </p>
       </Card>
 
-      <Card className="overflow-hidden p-0">
+      {/* Search Bar */}
+      <Card className="p-4">
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-neutral-400 w-5 h-5" />
+          <input
+            type="text"
+            placeholder="Search by name, employee ID, role, or status..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full pl-10 pr-4 py-2 border border-neutral-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+          />
+        </div>
+        {searchQuery && (
+          <div className="mt-2 text-sm text-neutral-600">
+            Found {filteredStaff.length} of {staff.length} staff members
+          </div>
+        )}
+      </Card>
+
+      {/* Stats Summary */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <Card className="p-4">
+          <div className="text-sm text-neutral-600">Total Staff</div>
+          <div className="text-2xl font-bold text-neutral-900 mt-1">{staff.length}</div>
+        </Card>
+        <Card className="p-4">
+          <div className="text-sm text-neutral-600">Active Status</div>
+          <div className="text-2xl font-bold text-green-600 mt-1">
+            {staff.filter((s) => s.WorkStatus === "Active").length}
+          </div>
+        </Card>
+        <Card className="p-4">
+          <div className="text-sm text-neutral-600">Doctors</div>
+          <div className="text-2xl font-bold text-blue-600 mt-1">{staff.filter((s) => s.Role === "Doctor").length}</div>
+        </Card>
+      </div>
+
+      {/* Staff Table */}
+      <Card>
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead>
-              <tr className="bg-neutral-50 border-b border-neutral-200">
-                <th className="px-6 py-4 text-left text-sm font-semibold text-neutral-700">Employee</th>
-                <th className="px-6 py-4 text-left text-sm font-semibold text-neutral-700">Role</th>
-                <th className="px-6 py-4 text-left text-sm font-semibold text-neutral-700">Work Status</th>
-                <th className="px-6 py-4 text-left text-sm font-semibold text-neutral-700">Assignment</th>
-                <th className="px-6 py-4 text-center text-sm font-semibold text-neutral-700">Actions</th>
+              <tr className="border-b border-neutral-200 bg-neutral-50">
+                <th className="px-4 py-3 text-left text-xs font-medium text-neutral-700 uppercase">Employee</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-neutral-700 uppercase">Role</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-neutral-700 uppercase">Work Status</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-neutral-700 uppercase">
+                  Assignment Period
+                </th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-neutral-700 uppercase">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-neutral-200">
-              {staff.map((s) => (
-                <tr key={s.AssignmentID} className="hover:bg-neutral-50 transition">
-                  <td className="px-6 py-4">
-                    <div className="font-medium text-neutral-900">{s.FullName}</div>
-                    <div className="text-sm text-neutral-600">#{s.EmployeeID}</div>
-                  </td>
-                  <td className="px-6 py-4 text-neutral-700">{s.Role}</td>
-                  <td className="px-6 py-4 text-neutral-700">{s.WorkStatus}</td>
-                  <td className="px-6 py-4 text-neutral-700">
-                    <div className="text-sm">Start: {s.StartDate ? String(s.StartDate).slice(0,10) : "—"}</div>
-                    <div className="text-sm">End: {s.EndDate ? String(s.EndDate).slice(0,10) : "—"}</div>
-                  </td>
-                  <td className="px-6 py-4 text-center">
-                    <Button variant="secondary" onClick={() => endAssignment(s.AssignmentID)}>End Today</Button>
-                  </td>
-                </tr>
-              ))}
-              {!staff.length && !loading && (
+              {loading ? (
                 <tr>
-                  <td className="px-6 py-8 text-center text-neutral-600" colSpan={5}>No active staff found for this branch/date.</td>
+                  <td colSpan={5} className="px-4 py-8 text-center text-neutral-500">
+                    <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2" />
+                    Loading staff...
+                  </td>
                 </tr>
+              ) : filteredStaff.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="px-4 py-8 text-center text-neutral-500">
+                    {searchQuery
+                      ? `No staff found matching "${searchQuery}"`
+                      : "No active staff found for this branch/date."}
+                  </td>
+                </tr>
+              ) : (
+                filteredStaff.map((s) => (
+                  <tr key={s.AssignmentID} className="hover:bg-neutral-50 transition-colors">
+                    <td className="px-4 py-3">
+                      <div className="text-sm font-medium text-neutral-900">{s.FullName}</div>
+                      <div className="text-xs text-neutral-500">ID: {s.EmployeeID}</div>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700">
+                        {s.Role}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span
+                        className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                          s.WorkStatus === "Active" ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-700"
+                        }`}
+                      >
+                        {s.WorkStatus}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-sm text-neutral-600">
+                      <div className="space-y-1">
+                        <div className="flex items-center">
+                          <span className="text-xs text-neutral-500 w-12">Start:</span>
+                          <span className="font-medium">
+                            {s.StartDate ? new Date(s.StartDate).toLocaleDateString("vi-VN") : "—"}
+                          </span>
+                        </div>
+                        <div className="flex items-center">
+                          <span className="text-xs text-neutral-500 w-12">End:</span>
+                          <span className={s.EndDate ? "font-medium" : "text-neutral-400"}>
+                            {s.EndDate ? new Date(s.EndDate).toLocaleDateString("vi-VN") : "Ongoing"}
+                          </span>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3">
+                      {!s.EndDate && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => endAssignment(s.AssignmentID, s.FullName)}
+                          className="hover:bg-red-50 hover:border-red-300 hover:text-red-700"
+                        >
+                          <UserMinus className="w-4 h-4 mr-1" />
+                          End
+                        </Button>
+                      )}
+                      {s.EndDate && <span className="text-xs text-neutral-400 italic">Ended</span>}
+                    </td>
+                  </tr>
+                ))
               )}
             </tbody>
           </table>
         </div>
+
+        {/* Footer */}
+        {!loading && filteredStaff.length > 0 && (
+          <div className="px-4 py-3 border-t border-neutral-200 bg-neutral-50 text-sm text-neutral-600">
+            Showing {filteredStaff.length} {searchQuery && `of ${staff.length}`} staff member(s)
+          </div>
+        )}
       </Card>
     </div>
   );

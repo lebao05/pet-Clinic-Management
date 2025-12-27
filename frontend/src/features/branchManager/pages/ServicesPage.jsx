@@ -109,9 +109,7 @@ export default function ServicesPage() {
                       value={s.ServicePrice}
                       onChange={(e) => {
                         const v = e.target.value;
-                        setServices((prev) =>
-                          prev.map((x, i) => (i === idx ? { ...x, ServicePrice: v } : x))
-                        );
+                        setServices((prev) => prev.map((x, i) => (i === idx ? { ...x, ServicePrice: v } : x)));
                       }}
                     />
                   </td>
@@ -121,9 +119,7 @@ export default function ServicesPage() {
                       checked={!!s.IsAvailable}
                       onChange={(e) => {
                         const v = e.target.checked;
-                        setServices((prev) =>
-                          prev.map((x, i) => (i === idx ? { ...x, IsAvailable: v } : x))
-                        );
+                        setServices((prev) => prev.map((x, i) => (i === idx ? { ...x, IsAvailable: v } : x)));
                       }}
                     />
                   </td>

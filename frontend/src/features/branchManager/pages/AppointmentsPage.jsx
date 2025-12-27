@@ -1,8 +1,10 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState, useCallback } from "react";
 import { Card } from "../../../shared/components/ui/Card";
 import Button from "../../../shared/components/ui/Button";
 import { branchManagerApi } from "../../../api/branchManagerApi";
+import { Calendar, Search, Download, RefreshCw, CheckCircle, Clock, XCircle, AlertCircle } from "lucide-react";
 
+// ==================== HELPER FUNCTIONS ====================
 function getDefaultBranchId() {
   const v = localStorage.getItem("branchId");
   return v ? Number(v) : 1;
@@ -16,174 +18,381 @@ function dateISO(d) {
   return `${yyyy}-${mm}-${dd}`;
 }
 
+function formatDateTime(dateString) {
+  const date = new Date(dateString);
+  const time = date.toLocaleTimeString("vi-VN", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+  const dateStr = date.toLocaleDateString("vi-VN", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  });
+  return { time, date: dateStr };
+}
+
+// ==================== STATUS BADGE ====================
+function StatusBadge({ status }) {
+  const config = {
+    Completed: { bg: "bg-green-100", text: "text-green-700", label: "Completed" },
+    Booked: { bg: "bg-blue-100", text: "text-blue-700", label: "Booked" },
+    Scheduled: { bg: "bg-yellow-100", text: "text-yellow-700", label: "Scheduled" },
+    Cancelled: { bg: "bg-red-100", text: "text-red-700", label: "Cancelled" },
+  };
+  const style = config[status] || { bg: "bg-gray-100", text: "text-gray-700", label: status };
+
+  return (
+    <span
+      className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${style.bg} ${style.text}`}
+    >
+      {style.label}
+    </span>
+  );
+}
+
+// ==================== STATS CARD ====================
+function StatsCard({ title, value, icon: Icon, color = "blue" }) {
+  const colorClasses = {
+    blue: "bg-blue-50 text-blue-600",
+    green: "bg-green-50 text-green-600",
+    yellow: "bg-yellow-50 text-yellow-600",
+    red: "bg-red-50 text-red-600",
+  };
+
+  return (
+    <Card className="p-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <p className="text-sm font-medium text-neutral-600">{title}</p>
+          <p className="text-2xl font-bold text-neutral-900 mt-1">{value}</p>
+        </div>
+        {Icon && (
+          <div className={`p-3 rounded-lg ${colorClasses[color]}`}>
+            <Icon className="w-6 h-6" />
+          </div>
+        )}
+      </div>
+    </Card>
+  );
+}
+
+// ==================== MAIN COMPONENT ====================
 export default function AppointmentsPage() {
   const [branchId, setBranchId] = useState(getDefaultBranchId());
   const [from, setFrom] = useState(dateISO(new Date(Date.now() - 7 * 86400000)));
   const [to, setTo] = useState(dateISO(new Date()));
-  const [status, setStatus] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
 
+  const [appointments, setAppointments] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [items, setItems] = useState([]);
   const [error, setError] = useState("");
 
-  const params = useMemo(() => {
-    const p = { branchId, from, to };
-    if (status) p.status = status;
-    return p;
-  }, [branchId, from, to, status]);
+  // ==================== STATS CALCULATION ====================
+  const stats = useMemo(() => {
+    const total = appointments.length;
+    const completed = appointments.filter((a) => a.Status === "Completed").length;
+    const booked = appointments.filter((a) => a.Status === "Booked" || a.Status === "Scheduled").length;
+    const cancelled = appointments.filter((a) => a.Status === "Cancelled").length;
 
-  async function load() {
+    return { total, completed, booked, cancelled };
+  }, [appointments]);
+
+  // ==================== FILTERED DATA ====================
+  const filteredAppointments = useMemo(() => {
+    let result = appointments;
+
+    // Filter by status
+    if (statusFilter) {
+      result = result.filter((a) => a.Status === statusFilter);
+    }
+
+    // Filter by search query
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase();
+      result = result.filter(
+        (a) =>
+          a.CustomerName?.toLowerCase().includes(query) ||
+          a.PetName?.toLowerCase().includes(query) ||
+          a.Phone?.toLowerCase().includes(query) ||
+          a.DoctorName?.toLowerCase().includes(query)
+      );
+    }
+
+    return result;
+  }, [appointments, statusFilter, searchQuery]);
+
+  // ==================== LOAD DATA ====================
+  const load = useCallback(async () => {
+    // Validate dates
+    const fromD = new Date(from);
+    const toD = new Date(to);
+
+    if (fromD > toD) {
+      setError("Start date must be before end date");
+      return;
+    }
+
     try {
       setLoading(true);
       setError("");
 
-      console.log("🔍 Loading appointments with params:", params);
+      const params = {
+        branchId,
+        from,
+        to,
+        ...(statusFilter && { status: statusFilter }),
+      };
 
       const res = await branchManagerApi.listAppointments(params);
-
-      console.log("📦 API Response:", res);
-      console.log("📊 Items:", res.data?.data?.items);
-
-      setItems(res.data?.data?.items || []);
+      setAppointments(res.data?.data?.items || []);
     } catch (e) {
-      console.error("❌ Error:", e);
       setError(e.response?.data?.message || e.message);
     } finally {
       setLoading(false);
     }
-  }
+  }, [branchId, from, to, statusFilter]);
 
-  // ✅ FIX: Thêm params vào dependency để auto-reload
   useEffect(() => {
     load();
-  }, [params]); // ← QUAN TRỌNG!
+  }, [load]);
 
+  // ==================== HANDLERS ====================
   function saveBranch() {
     localStorage.setItem("branchId", String(branchId));
-    // Không cần gọi load() ở đây vì useEffect sẽ tự động chạy khi branchId thay đổi
+    load();
   }
 
+  function handleExport() {
+    const headers = ["Time", "Pet", "Customer", "Phone", "Service", "Doctor", "Status"];
+    const rows = filteredAppointments.map((a) => {
+      const { time, date } = formatDateTime(a.ScheduleTime);
+      return [
+        `${date} ${time}`,
+        a.PetName,
+        a.CustomerName,
+        a.Phone || "",
+        a.ServiceName,
+        a.DoctorName || "—",
+        a.Status,
+      ];
+    });
+
+    const csvContent = [headers.join(","), ...rows.map((row) => row.map((cell) => `"${cell}"`).join(","))].join("\n");
+
+    const blob = new Blob([csvContent], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `appointments_${branchId}_${from}_${to}.csv`;
+    link.click();
+  }
+
+  // ==================== RENDER ====================
   return (
     <div className="space-y-6">
-      <div className="flex items-start justify-between gap-4 flex-wrap">
+      {/* Header */}
+      <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-neutral-900 mb-2">Appointments Overview</h1>
-          <p className="text-neutral-600">Track appointments by date range and status (branch-level).</p>
+          <h1 className="text-2xl font-bold text-neutral-900">Appointments</h1>
+          <p className="text-sm text-neutral-600 mt-1">Manage and track appointments by date range and status</p>
         </div>
-        <div className="flex items-center gap-2">
-          <input
-            className="w-28 px-3 py-2 border rounded-lg"
-            type="number"
-            value={branchId}
-            min={1}
-            onChange={(e) => setBranchId(Number(e.target.value))}
-            placeholder="Branch"
-          />
-          <Button onClick={saveBranch}>Set Branch</Button>
+
+        <div className="flex gap-2">
+          <Button onClick={load} variant="outline" disabled={loading}>
+            <RefreshCw className={`w-4 h-4 mr-2 ${loading ? "animate-spin" : ""}`} />
+            Refresh
+          </Button>
+          <Button onClick={handleExport} variant="outline" disabled={filteredAppointments.length === 0}>
+            <Download className="w-4 h-4 mr-2" />
+            Export CSV
+          </Button>
         </div>
       </div>
 
-      <Card>
-        <div className="flex gap-3 flex-wrap items-end">
-          <div>
-            <label className="block text-sm text-neutral-600 mb-1">From</label>
+      {/* Error Alert */}
+      {error && (
+        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg flex items-start">
+          <AlertCircle className="w-5 h-5 mr-2 flex-shrink-0 mt-0.5" />
+          <span>{error}</span>
+        </div>
+      )}
+
+      {/* Testing Controls - Collapsible */}
+      <details className="bg-neutral-50 border border-neutral-200 rounded-lg p-4">
+        <summary className="cursor-pointer font-medium text-neutral-700 text-sm">
+          🔧 Testing Controls (Click to expand)
+        </summary>
+        <div className="flex gap-4 items-end mt-4">
+          <div className="flex-1">
+            <label className="block text-sm font-medium text-neutral-700 mb-1">Branch ID (for testing)</label>
             <input
-              className="px-3 py-2 border rounded-lg"
+              type="number"
+              value={branchId}
+              onChange={(e) => setBranchId(Number(e.target.value))}
+              className="w-full px-3 py-2 border border-neutral-300 rounded-lg"
+            />
+          </div>
+          <Button onClick={saveBranch} variant="primary">
+            Load Data
+          </Button>
+        </div>
+        <div className="mt-2 text-xs text-neutral-600 bg-blue-50 p-2 rounded border border-blue-200">
+          💡 <strong>Tip:</strong> Change Branch ID to test different branches (1, 2, 3, etc.)
+        </div>
+      </details>
+
+      {/* Date Range Filter - SIMPLIFIED LIKE REPORTS */}
+      <Card className="p-4">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-neutral-700 mb-1">From</label>
+            <input
               type="date"
               value={from}
               onChange={(e) => setFrom(e.target.value)}
+              max={to}
+              className="w-full px-3 py-2 border border-neutral-300 rounded-lg focus:ring-2 focus:ring-blue-500"
             />
           </div>
+
           <div>
-            <label className="block text-sm text-neutral-600 mb-1">To</label>
+            <label className="block text-sm font-medium text-neutral-700 mb-1">To</label>
             <input
-              className="px-3 py-2 border rounded-lg"
               type="date"
               value={to}
               onChange={(e) => setTo(e.target.value)}
+              min={from}
+              max={dateISO(new Date())}
+              className="w-full px-3 py-2 border border-neutral-300 rounded-lg focus:ring-2 focus:ring-blue-500"
             />
           </div>
+
           <div>
-            <label className="block text-sm text-neutral-600 mb-1">Status</label>
-            <select className="px-3 py-2 border rounded-lg" value={status} onChange={(e) => setStatus(e.target.value)}>
-              <option value="">All</option>
+            <label className="block text-sm font-medium text-neutral-700 mb-1">Status</label>
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              className="w-full px-3 py-2 border border-neutral-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">All Status</option>
               <option value="Booked">Booked</option>
+              <option value="Scheduled">Scheduled</option>
               <option value="Completed">Completed</option>
               <option value="Cancelled">Cancelled</option>
             </select>
           </div>
-          <Button onClick={load} disabled={loading}>
-            {loading ? "Loading..." : "Refresh"}
-          </Button>
-          {error && <p className="text-sm text-red-600">{error}</p>}
+
+          <div className="flex items-end">
+            <button
+              className="w-full px-4 py-2 text-sm font-medium bg-blue-600 text-white hover:bg-blue-700 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              onClick={load}
+              disabled={loading}
+            >
+              Apply Filters
+            </button>
+          </div>
         </div>
       </Card>
 
-      {loading && (
-        <Card>
-          <div className="text-center py-8 text-neutral-600">Loading appointments...</div>
-        </Card>
-      )}
+      {/* Stats Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <StatsCard title="Total" value={stats.total} icon={Calendar} color="blue" />
+        <StatsCard title="Completed" value={stats.completed} icon={CheckCircle} color="green" />
+        <StatsCard title="Booked" value={stats.booked} icon={Clock} color="yellow" />
+        <StatsCard title="Cancelled" value={stats.cancelled} icon={XCircle} color="red" />
+      </div>
 
-      {!loading && (
-        <Card className="overflow-hidden p-0">
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="bg-neutral-50 border-b border-neutral-200">
-                  <th className="px-6 py-4 text-left text-sm font-semibold text-neutral-700">Time</th>
-                  <th className="px-6 py-4 text-left text-sm font-semibold text-neutral-700">Pet</th>
-                  <th className="px-6 py-4 text-left text-sm font-semibold text-neutral-700">Customer</th>
-                  <th className="px-6 py-4 text-left text-sm font-semibold text-neutral-700">Service</th>
-                  <th className="px-6 py-4 text-left text-sm font-semibold text-neutral-700">Doctor</th>
-                  <th className="px-6 py-4 text-center text-sm font-semibold text-neutral-700">Status</th>
+      {/* Search */}
+      <Card className="p-4">
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-neutral-400 w-5 h-5" />
+          <input
+            type="text"
+            placeholder="Search by customer, pet, phone, or doctor..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full pl-10 pr-4 py-2 border border-neutral-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+          />
+        </div>
+        {searchQuery && (
+          <div className="mt-2 text-sm text-neutral-600">
+            Found {filteredAppointments.length} of {appointments.length} appointments
+          </div>
+        )}
+      </Card>
+
+      {/* Table */}
+      <Card>
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead>
+              <tr className="border-b border-neutral-200 bg-neutral-50">
+                <th className="px-4 py-3 text-left text-xs font-medium text-neutral-700 uppercase">Time</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-neutral-700 uppercase">Pet</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-neutral-700 uppercase">Customer</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-neutral-700 uppercase">Service</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-neutral-700 uppercase">Doctor</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-neutral-700 uppercase">Status</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-neutral-200">
+              {loading ? (
+                <tr>
+                  <td colSpan={6} className="px-4 py-8 text-center text-neutral-500">
+                    <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2" />
+                    Loading appointments...
+                  </td>
                 </tr>
-              </thead>
-              <tbody className="divide-y divide-neutral-200">
-                {items.length === 0 ? (
-                  <tr>
-                    <td className="px-6 py-8 text-center text-neutral-600" colSpan={6}>
-                      No appointments found.
-                    </td>
-                  </tr>
-                ) : (
-                  items.map((a) => (
-                    <tr key={a.AppointmentID} className="hover:bg-neutral-50 transition">
-                      <td className="px-6 py-4 text-neutral-800">{new Date(a.ScheduleTime).toLocaleString()}</td>
-                      <td className="px-6 py-4">
-                        <div className="font-medium text-neutral-900">{a.PetName}</div>
-                        <div className="text-sm text-neutral-600">{a.Species}</div>
+              ) : filteredAppointments.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="px-4 py-8 text-center text-neutral-500">
+                    {searchQuery || statusFilter
+                      ? "No appointments found. Try adjusting your filters."
+                      : "No appointments found for the selected date range."}
+                  </td>
+                </tr>
+              ) : (
+                filteredAppointments.map((appointment) => {
+                  const { time, date } = formatDateTime(appointment.ScheduleTime);
+                  return (
+                    <tr key={appointment.AppointmentID} className="hover:bg-neutral-50 transition-colors">
+                      <td className="px-4 py-3">
+                        <div className="text-sm font-medium text-neutral-900">{time}</div>
+                        <div className="text-xs text-neutral-500">{date}</div>
                       </td>
-                      <td className="px-6 py-4">
-                        <div className="font-medium text-neutral-900">{a.CustomerName}</div>
-                        <div className="text-sm text-neutral-600">{a.Phone}</div>
+                      <td className="px-4 py-3">
+                        <div className="text-sm font-medium text-neutral-900">{appointment.PetName}</div>
+                        <div className="text-xs text-neutral-500">{appointment.Species}</div>
                       </td>
-                      <td className="px-6 py-4">
-                        <div className="font-medium text-neutral-900">{a.ServiceName}</div>
-                        <div className="text-sm text-neutral-600">{a.ServiceType}</div>
+                      <td className="px-4 py-3">
+                        <div className="text-sm font-medium text-neutral-900">{appointment.CustomerName}</div>
+                        <div className="text-xs text-neutral-500">{appointment.Phone || "—"}</div>
                       </td>
-                      <td className="px-6 py-4 text-neutral-800">{a.DoctorName || "—"}</td>
-                      <td className="px-6 py-4 text-center">
-                        <span
-                          className={`px-3 py-1 rounded-full text-xs font-medium ${
-                            a.Status === "Completed"
-                              ? "bg-green-100 text-green-700"
-                              : a.Status === "Booked"
-                              ? "bg-blue-100 text-blue-700"
-                              : "bg-gray-100 text-gray-700"
-                          }`}
-                        >
-                          {a.Status}
-                        </span>
+                      <td className="px-4 py-3">
+                        <div className="text-sm font-medium text-neutral-900">{appointment.ServiceName}</div>
+                        <div className="text-xs text-neutral-500">{appointment.ServiceType}</div>
+                      </td>
+                      <td className="px-4 py-3 text-sm text-neutral-900">{appointment.DoctorName || "—"}</td>
+                      <td className="px-4 py-3">
+                        <StatusBadge status={appointment.Status} />
                       </td>
                     </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Footer with count */}
+        {!loading && filteredAppointments.length > 0 && (
+          <div className="px-4 py-3 border-t border-neutral-200 bg-neutral-50 text-sm text-neutral-600">
+            Showing {filteredAppointments.length} of {appointments.length} appointments
           </div>
-        </Card>
-      )}
+        )}
+      </Card>
     </div>
   );
 }
