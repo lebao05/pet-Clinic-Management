@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from "react";
 import { Calendar, Clock, User, MapPin } from "lucide-react";
 import userApi from "../../../api/userApi";
+import { useAuth } from "../../../contexts/AuthContext";
 
 const AppointmentBookingPage = () => {
-  const [userId] = useState(1);
+  const { user } = useAuth();
+  const userId = user?.userId;
   const [branches, setBranches] = useState([]);
   const [pets, setPets] = useState([]);
   const [services, setServices] = useState([]);
@@ -22,9 +24,10 @@ const AppointmentBookingPage = () => {
   const [bookingStatus, setBookingStatus] = useState(null);
 
   useEffect(() => {
+    if (!userId) return;
     fetchBranches();
     fetchPets();
-  }, []);
+  }, [userId]);
 
   useEffect(() => {
     if (formData.branchId) {
@@ -48,10 +51,17 @@ const AppointmentBookingPage = () => {
 
   const fetchPets = async () => {
     try {
+      if (!userId) {
+        setError("Vui lòng đăng nhập để xem danh sách thú cưng");
+        return;
+      }
+      console.log(`[AppointmentBookingPage] Fetching pets for userId: ${userId}`);
       const response = await userApi.getPets(userId);
+      console.log(`[AppointmentBookingPage] Got pets:`, response.data);
       setPets(response.data.data || []);
     } catch (err) {
-      console.error(err);
+      console.error("Error fetching pets:", err);
+      setError("Lỗi khi tải danh sách thú cưng");
     } finally {
       setLoading(false);
     }
@@ -144,6 +154,24 @@ catch (err) {
     }
   };
 
+  if (!userId) {
+    return (
+      <div style={{ maxWidth: "768px", margin: "0 auto", padding: "32px 24px" }}>
+        <div
+          style={{
+            backgroundColor: "#fef2f2",
+            border: "1px solid #fecaca",
+            borderRadius: "8px",
+            padding: "16px",
+            color: "#b91c1c",
+          }}
+        >
+          Vui lòng đăng nhập để đặt lịch khám
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div style={{ maxWidth: "768px", margin: "0 auto", padding: "32px 24px" }}>
       <h1
@@ -174,14 +202,11 @@ catch (err) {
       {bookingStatus && (
         <div
           style={{
-            border: "1px solid",
+            backgroundColor: bookingStatus.type === "success" ? "#f0fdf4" : "#fef2f2",
+            border: `1px solid ${bookingStatus.type === "success" ? "#86efac" : "#fecaca"}`,
             borderRadius: "8px",
             padding: "16px",
             marginBottom: "32px",
-            backgroundColor:
-              bookingStatus.type === "success" ? "#f0fdf4" : "#fef2f2",
-            borderColor:
-              bookingStatus.type === "success" ? "#86efac" : "#fecaca",
             color: bookingStatus.type === "success" ? "#166534" : "#b91c1c",
           }}
         >
@@ -189,276 +214,224 @@ catch (err) {
         </div>
       )}
 
-      <div
+      <form
+        onSubmit={handleSubmit}
         style={{
-          backgroundColor: "white",
+          backgroundColor: "#ffffff",
           border: "1px solid #e5e7eb",
           borderRadius: "8px",
           padding: "32px",
+          boxShadow: "0 1px 3px 0 rgba(0, 0, 0, 0.1)",
         }}
       >
-        <form
-          onSubmit={handleSubmit}
-          style={{ display: "flex", flexDirection: "column", gap: "24px" }}
-        >
-          {/* Branch Selection */}
-          <div>
-            <label
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "8px",
-                fontSize: "14px",
-                fontWeight: "500",
-                marginBottom: "8px",
-              }}
-            >
-              <MapPin size={16} />
-              Chọn chi nhánh *
-            </label>
-            <select
-              name="branchId"
-              value={formData.branchId}
-              onChange={handleInputChange}
-              style={{
-                width: "100%",
-                border: "1px solid #d1d5db",
-                borderRadius: "4px",
-                padding: "8px 12px",
-                fontSize: "14px",
-                boxSizing: "border-box",
-                backgroundColor: formData.branchId ? "white" : "#f9fafb",
-              }}
-            >
-              <option value="">-- Chọn chi nhánh --</option>
-              {branches.map((branch) => (
-                <option key={branch.BranchID} value={branch.BranchID}>
-                  {branch.BranchName} ({branch.City})
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Pet Selection */}
-          <div>
-            <label
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "8px",
-                fontSize: "14px",
-                fontWeight: "500",
-                marginBottom: "8px",
-              }}
-            >
-              <User size={16} />
-              Chọn thú cưng *
-            </label>
-            {loading ? (
-              <div style={{ color: "#6b7280" }}>Đang tải...</div>
-            ) : (
-              <select
-                name="petId"
-                value={formData.petId}
-                onChange={handleInputChange}
-                style={{
-                  width: "100%",
-                  border: "1px solid #d1d5db",
-                  borderRadius: "4px",
-                  padding: "8px 12px",
-                  fontSize: "14px",
-                  boxSizing: "border-box",
-                  backgroundColor: formData.petId ? "white" : "#f9fafb",
-                }}
-              >
-                <option value="">-- Chọn thú cưng --</option>
-                {pets.map((pet) => (
-                  <option key={pet.PetID} value={pet.PetID}>
-                    {pet.PetName} ({pet.Species})
-                  </option>
-                ))}
-              </select>
-            )}
-          </div>
-
-          {/* Service Selection */}
-          <div>
-            <label
-              style={{
-                fontSize: "14px",
-                fontWeight: "500",
-                marginBottom: "8px",
-                display: "block",
-              }}
-            >
-              Dịch vụ khám *
-            </label>
-            <select
-              name="serviceId"
-              value={formData.serviceId}
-              onChange={handleInputChange}
-              disabled={!formData.branchId}
-              style={{
-                width: "100%",
-                border: "1px solid #d1d5db",
-                borderRadius: "4px",
-                padding: "8px 12px",
-                fontSize: "14px",
-                boxSizing: "border-box",
-                backgroundColor: formData.serviceId ? "white" : "#f9fafb",
-                opacity: formData.branchId ? 1 : 0.5,
-                cursor: formData.branchId ? "pointer" : "not-allowed",
-              }}
-            >
-              <option value="">
-                {formData.branchId
-                  ? "-- Chọn dịch vụ --"
-                  : "-- Vui lòng chọn chi nhánh --"}
-              </option>
-              {services.map((service) => (
-                <option key={service.ServiceID} value={service.ServiceID}>
-                  {service.ServiceName}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Doctor Selection */}
-          <div>
-            <label
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "8px",
-                fontSize: "14px",
-                fontWeight: "500",
-                marginBottom: "8px",
-              }}
-            >
-              <User size={16} />
-              Chọn bác sĩ *
-            </label>
-            <select
-              name="doctorId"
-              value={formData.doctorId}
-              onChange={handleInputChange}
-              disabled={!formData.branchId}
-              style={{
-                width: "100%",
-                border: "1px solid #d1d5db",
-                borderRadius: "4px",
-                padding: "8px 12px",
-                fontSize: "14px",
-                boxSizing: "border-box",
-                backgroundColor: formData.doctorId ? "white" : "#f9fafb",
-                opacity: formData.branchId ? 1 : 0.5,
-                cursor: formData.branchId ? "pointer" : "not-allowed",
-              }}
-            >
-              <option value="">
-                {formData.branchId
-                  ? "-- Chọn bác sĩ --"
-                  : "-- Vui lòng chọn chi nhánh --"}
-              </option>
-              {doctors.map((doctor) => (
-                <option key={doctor.EmployeeID} value={doctor.EmployeeID}>
-                  {doctor.FullName}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* DateTime Selection */}
-          <div>
-            <label
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "8px",
-                fontSize: "14px",
-                fontWeight: "500",
-                marginBottom: "8px",
-              }}
-            >
-              <Calendar size={16} />
-              Ngày giờ khám *
-            </label>
-            <input
-              type="datetime-local"
-              name="scheduleTime"
-              value={formData.scheduleTime}
-              onChange={handleInputChange}
-              style={{
-                width: "100%",
-                border: "1px solid #d1d5db",
-                borderRadius: "4px",
-                padding: "8px 12px",
-                fontSize: "14px",
-                boxSizing: "border-box",
-              }}
-            />
-          </div>
-
-          <button
-            type="submit"
-            disabled={loading}
+        {/* Chọn chi nhánh */}
+        <div style={{ marginBottom: "24px" }}>
+          <label
+            htmlFor="branchId"
             style={{
-              width: "100%",
-              backgroundColor: "#16a34a",
-              color: "white",
-              border: "none",
-              borderRadius: "8px",
-              padding: "10px 16px",
-              fontSize: "16px",
+              display: "block",
+              fontSize: "14px",
               fontWeight: "500",
-              cursor: loading ? "not-allowed" : "pointer",
-              opacity: loading ? 0.7 : 1,
+              marginBottom: "8px",
+              color: "#1f2937",
             }}
           >
-            {loading ? "Đang xử lý..." : "Đặt lịch khám"}
-          </button>
-        </form>
-      </div>
+            Chi nhánh *
+          </label>
+          <select
+            id="branchId"
+            name="branchId"
+            value={formData.branchId}
+            onChange={handleInputChange}
+            style={{
+              width: "100%",
+              padding: "8px 12px",
+              borderRadius: "4px",
+              border: "1px solid #d1d5db",
+              fontSize: "14px",
+            }}
+            required
+          >
+            <option value="">Chọn chi nhánh</option>
+            {branches.map((branch) => (
+              <option key={branch.BranchID} value={branch.BranchID}>
+                {branch.BranchName}
+              </option>
+            ))}
+          </select>
+        </div>
 
-      {/* Appointment Tips */}
-      <div
-        style={{
-          marginTop: "32px",
-          backgroundColor: "#eff6ff",
-          border: "1px solid #bfdbfe",
-          borderRadius: "8px",
-          padding: "24px",
-        }}
-      >
-        <h3
+        {/* Chọn thú cưng */}
+        <div style={{ marginBottom: "24px" }}>
+          <label
+            htmlFor="petId"
+            style={{
+              display: "block",
+              fontSize: "14px",
+              fontWeight: "500",
+              marginBottom: "8px",
+              color: "#1f2937",
+            }}
+          >
+            Thú cưng *
+          </label>
+          <select
+            id="petId"
+            name="petId"
+            value={formData.petId}
+            onChange={handleInputChange}
+            style={{
+              width: "100%",
+              padding: "8px 12px",
+              borderRadius: "4px",
+              border: "1px solid #d1d5db",
+              fontSize: "14px",
+            }}
+            required
+          >
+            <option value="">Chọn thú cưng</option>
+            {pets.map((pet) => (
+              <option key={pet.PetID} value={pet.PetID}>
+                {pet.PetName}
+              </option>
+            ))}
+          </select>
+          {pets.length === 0 && userId && (
+            <p style={{ color: "#ef4444", fontSize: "12px", marginTop: "4px" }}>
+              Bạn chưa có thú cưng nào. Hãy thêm thú cưng trước.
+            </p>
+          )}
+        </div>
+
+        {/* Chọn dịch vụ */}
+        <div style={{ marginBottom: "24px" }}>
+          <label
+            htmlFor="serviceId"
+            style={{
+              display: "block",
+              fontSize: "14px",
+              fontWeight: "500",
+              marginBottom: "8px",
+              color: "#1f2937",
+            }}
+          >
+            Dịch vụ *
+          </label>
+          <select
+            id="serviceId"
+            name="serviceId"
+            value={formData.serviceId}
+            onChange={handleInputChange}
+            disabled={!formData.branchId}
+            style={{
+              width: "100%",
+              padding: "8px 12px",
+              borderRadius: "4px",
+              border: "1px solid #d1d5db",
+              fontSize: "14px",
+              backgroundColor: !formData.branchId ? "#f3f4f6" : "#ffffff",
+            }}
+            required
+          >
+            <option value="">Chọn dịch vụ</option>
+            {services.map((service) => (
+              <option key={service.ServiceID} value={service.ServiceID}>
+                {service.ServiceName}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {/* Chọn bác sĩ */}
+        <div style={{ marginBottom: "24px" }}>
+          <label
+            htmlFor="doctorId"
+            style={{
+              display: "block",
+              fontSize: "14px",
+              fontWeight: "500",
+              marginBottom: "8px",
+              color: "#1f2937",
+            }}
+          >
+            Bác sĩ *
+          </label>
+          <select
+            id="doctorId"
+            name="doctorId"
+            value={formData.doctorId}
+            onChange={handleInputChange}
+            disabled={!formData.branchId}
+            style={{
+              width: "100%",
+              padding: "8px 12px",
+              borderRadius: "4px",
+              border: "1px solid #d1d5db",
+              fontSize: "14px",
+              backgroundColor: !formData.branchId ? "#f3f4f6" : "#ffffff",
+            }}
+            required
+          >
+            <option value="">Chọn bác sĩ</option>
+            {doctors.map((doctor) => (
+              <option key={doctor.EmployeeID} value={doctor.EmployeeID}>
+                {doctor.FullName}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {/* Chọn thời gian */}
+        <div style={{ marginBottom: "24px" }}>
+          <label
+            htmlFor="scheduleTime"
+            style={{
+              display: "block",
+              fontSize: "14px",
+              fontWeight: "500",
+              marginBottom: "8px",
+              color: "#1f2937",
+            }}
+          >
+            Thời gian khám *
+          </label>
+          <input
+            type="datetime-local"
+            id="scheduleTime"
+            name="scheduleTime"
+            value={formData.scheduleTime}
+            onChange={handleInputChange}
+            style={{
+              width: "100%",
+              padding: "8px 12px",
+              borderRadius: "4px",
+              border: "1px solid #d1d5db",
+              fontSize: "14px",
+            }}
+            required
+          />
+        </div>
+
+        {/* Nút đặt lịch */}
+        <button
+          type="submit"
+          disabled={loading}
           style={{
-            fontWeight: "bold",
-            marginBottom: "16px",
-            display: "flex",
-            alignItems: "center",
-            gap: "8px",
+            width: "100%",
+            backgroundColor: "#3b82f6",
+            color: "#ffffff",
+            padding: "12px 24px",
+            borderRadius: "4px",
+            border: "none",
+            fontSize: "16px",
+            fontWeight: "600",
+            cursor: loading ? "not-allowed" : "pointer",
+            opacity: loading ? 0.6 : 1,
           }}
         >
-          <Clock size={20} />
-          Lưu ý
-        </h3>
-        <ul
-          style={{
-            display: "flex",
-            flexDirection: "column",
-            gap: "8px",
-            fontSize: "14px",
-            color: "#374151",
-          }}
-        >
-          <li>• Vui lòng đến trước giờ khám 15 phút</li>
-          <li>• Mang theo thẻ căn cước/CCCD của chủ thú cưng</li>
-          <li>• Chuẩn bị tất cả các phác đồ tiêm chủng trước đó</li>
-          <li>
-            • Liên hệ chúng tôi để hủy/dời lịch ít nhất 24 giờ trước
-          </li>
-        </ul>
-      </div>
+          {loading ? "Đang xử lý..." : "Đặt lịch khám"}
+        </button>
+      </form>
     </div>
   );
 };

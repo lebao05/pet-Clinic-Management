@@ -1,8 +1,130 @@
 // controllers/userController.js
 const UserModel = require("../models/userModel");
+const PetModel = require("../models/petModel");
 const { getConnection, sql } = require("../config/database");
+const bcrypt = require("bcrypt");
 
 class UserController {
+  // POST /api/users/register
+  static async register(req, res) {
+    try {
+      const { fullName, phone, email, password, cccd, gender, birthDate } = req.body;
+
+      if (!fullName || !phone || !password) {
+        return res.status(400).json({
+          success: false,
+          message: "Họ tên, số điện thoại và mật khẩu là bắt buộc"
+        });
+      }
+
+      // Check if phone already exists
+      const pool = await getConnection();
+      const existingUser = await pool.request()
+        .input("phone", sql.NVarChar, phone)
+        .query("SELECT UserID FROM Users WHERE Phone = @phone");
+
+      if (existingUser.recordset.length > 0) {
+        return res.status(400).json({
+          success: false,
+          message: "Số điện thoại đã được sử dụng"
+        });
+      }
+
+      // Hash password
+      const saltRounds = 10;
+      const hashedPassword = await bcrypt.hash(password, saltRounds);
+
+      // Create user
+      const result = await pool.request()
+        .input("fullName", sql.NVarChar, fullName)
+        .input("phone", sql.NVarChar, phone)
+        .input("email", sql.NVarChar, email || null)
+        .input("passwordHash", sql.NVarChar, hashedPassword)
+        .input("cccd", sql.NVarChar, cccd || null)
+        .input("gender", sql.NVarChar, gender || null)
+        .input("birthDate", sql.Date, birthDate || null)
+        .query(`
+          INSERT INTO Users (FullName, Phone, Email, PasswordHash, CCCD, Gender, BirthDate, LoyaltyPoints, IsActive)
+          VALUES (@fullName, @phone, @email, @passwordHash, @cccd, @gender, @birthDate, 0, 1);
+          SELECT SCOPE_IDENTITY() AS UserID;
+        `);
+
+      const userId = result.recordset[0].UserID;
+
+      res.status(201).json({
+        success: true,
+        message: "Đăng ký thành công",
+        data: { userId }
+      });
+    } catch (err) {
+      res.status(500).json({
+        success: false,
+        message: "Lỗi server: " + err.message
+      });
+    }
+  }
+
+  // POST /api/users/login
+  static async login(req, res) {
+    try {
+      const { phone, password } = req.body;
+
+      if (!phone || !password) {
+        return res.status(400).json({
+          success: false,
+          message: "Vui lòng nhập số điện thoại và mật khẩu"
+        });
+      }
+
+      const pool = await getConnection();
+      const result = await pool.request()
+        .input("phone", sql.NVarChar, phone)
+        .query(`
+          SELECT UserID, PasswordHash, FullName, Phone, Email, IsActive
+          FROM Users
+          WHERE Phone = @phone AND IsActive = 1
+        `);
+
+      if (result.recordset.length === 0) {
+        return res.status(401).json({
+          success: false,
+          message: "Số điện thoại hoặc mật khẩu không đúng"
+        });
+      }
+
+      const user = result.recordset[0];
+
+      // Check password
+      const isValidPassword = await bcrypt.compare(password, user.PasswordHash);
+
+      if (!isValidPassword) {
+        return res.status(401).json({
+          success: false,
+          message: "Số điện thoại hoặc mật khẩu không đúng"
+        });
+      }
+
+      // Return user info (exclude password)
+      const userInfo = {
+        userId: user.UserID,
+        fullName: user.FullName,
+        phone: user.Phone,
+        email: user.Email
+      };
+
+      res.json({
+        success: true,
+        message: "Đăng nhập thành công",
+        data: userInfo
+      });
+    } catch (err) {
+      res.status(500).json({
+        success: false,
+        message: "Lỗi server: " + err.message
+      });
+    }
+  }
+
   // GET /api/users
   static async getAll(req, res) {
     try {
@@ -135,6 +257,47 @@ class UserController {
       res.status(500).json({
         success: false,
         error: err.message,
+      });
+    }
+  }
+
+  // POST /api/users/:id/pets
+  static async createPet(req, res) {
+    try {
+      const userId = req.params.id;
+      const { petName, species, breed, birthDate, gender, color, weight, notes } = req.body;
+
+      if (!petName || !species) {
+        return res.status(400).json({
+          success: false,
+          message: "Tên thú cưng và giống loài là bắt buộc"
+        });
+      }
+
+      const petData = {
+        userId: parseInt(userId),
+        petName,
+        species,
+        breed: breed || null,
+        birthDate: birthDate || null,
+        gender: gender || null,
+        color: color || null,
+        weight: weight ? parseFloat(weight) : null,
+        healthStatus: null,
+        notes: notes || null
+      };
+
+      const petId = await PetModel.create(petData);
+
+      res.status(201).json({
+        success: true,
+        message: "Thêm thú cưng thành công",
+        data: { petId }
+      });
+    } catch (err) {
+      res.status(500).json({
+        success: false,
+        message: "Lỗi khi thêm thú cưng: " + err.message
       });
     }
   }

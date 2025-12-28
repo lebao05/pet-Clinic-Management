@@ -1,6 +1,16 @@
 import axiosClient from "./axiosClient";
 
 const userApi = {
+  // Đăng ký
+  register: (userData) => {
+    return axiosClient.post("/user/register", userData);
+  },
+
+  // Đăng nhập
+  login: (phone, password) => {
+    return axiosClient.post("/user/login", { phone, password });
+  },
+
   // Lấy danh sách chi nhánh
   getBranches: () => {
     return axiosClient.get("/user/branches");
@@ -62,6 +72,11 @@ const userApi = {
   // Lấy pets của user
   getPets: (userId) => {
     return axiosClient.get(`/user/${userId}/pets`);
+  },
+
+  // Thêm pet mới
+  createPet: (userId, petData) => {
+    return axiosClient.post(`/user/${userId}/pets`, petData);
   },
 
   // Lấy appointments của user

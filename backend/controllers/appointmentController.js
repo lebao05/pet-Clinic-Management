@@ -43,6 +43,33 @@ class AppointmentController {
     }
   }
 
+  // GET /api/appointments/user/:userId
+  static async getByUserId(req, res) {
+    try {
+      const userId = parseInt(req.params.userId);
+      console.log("getByUserId called with userId:", userId);
+      if (isNaN(userId)) {
+        return res.status(400).json({
+          success: false,
+          error: "Invalid userId"
+        });
+      }
+      const appointments = await AppointmentModel.getByUserId(userId);
+      console.log("Found appointments:", appointments.length);
+      res.json({
+        success: true,
+        count: appointments.length,
+        data: appointments,
+      });
+    } catch (err) {
+      console.error("Error in getByUserId:", err);
+      res.status(500).json({
+        success: false,
+        error: err.message,
+      });
+    }
+  }
+
   // POST /api/appointments
   static async create(req, res) {
     try {

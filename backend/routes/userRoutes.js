@@ -4,12 +4,15 @@ const router = express.Router();
 const UserController = require("../controllers/userController");
 
 router.get("/branches", UserController.getBranches);
+router.post("/register", UserController.register);
+router.post("/login", UserController.login);
 router.get("/", UserController.getAll);
 router.get("/:id", UserController.getById);
 router.post("/", UserController.create);
 router.put("/:id", UserController.update);
 router.delete("/:id", UserController.delete);
 router.get("/:id/pets", UserController.getPets);
+router.post("/:id/pets", UserController.createPet);
 router.get("/:id/appointments", UserController.getAppointments);
 
 router.get("/products/search", UserController.searchProducts);

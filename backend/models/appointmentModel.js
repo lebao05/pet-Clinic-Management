@@ -26,6 +26,24 @@ class AppointmentModel {
     return result.recordset[0];
   }
 
+  static async getByUserId(userId) {
+    const pool = await getConnection();
+    const result = await pool.request().input("userId", sql.Int, userId).query(
+      `SELECT a.AppointmentID, a.ScheduleTime, a.Status, a.BranchID, b.BranchName,
+              a.ServiceID, s.ServiceName, a.UserID, u.FullName AS CustomerName,
+              a.PetID, p.PetName, a.DoctorID, e.FullName AS DoctorName
+       FROM Appointment a
+       JOIN Branch b ON b.BranchID=a.BranchID
+       JOIN Service s ON s.ServiceID=a.ServiceID
+       JOIN Users u ON u.UserID=a.UserID
+       JOIN Pet p ON p.PetID=a.PetID
+       LEFT JOIN Employee e ON e.EmployeeID=a.DoctorID
+       WHERE a.UserID=@userId
+       ORDER BY a.ScheduleTime DESC;`
+    );
+    return result.recordset;
+  }
+
   static async create(data) {
     const pool = await getConnection();
     const result = await pool
