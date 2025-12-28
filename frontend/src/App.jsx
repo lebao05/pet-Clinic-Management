@@ -6,6 +6,10 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import CustomerLayout from "./features/customer/layouts/CustomerLayout";
 import CustomerHomePage from "./features/customer/pages/HomePage";
 import CustomerProfilePage from "./features/customer/pages/ProfilePage";
+import ProductSearchPage from "./features/customer/pages/ProductSearchPage";
+import DoctorSearchPage from "./features/customer/pages/DoctorSearchPage";
+import AppointmentBookingPage from "./features/customer/pages/AppointmentBookingPage";
+import HistoryPage from "./features/customer/pages/HistoryPage";
 
 // Routes
 import ManagerRoutes from "./routes/ManagerRoutes";
@@ -21,6 +25,10 @@ function App() {
         {/* Customer Routes */}
         <Route path="/customer" element={<CustomerLayout />}>
           <Route index element={<CustomerHomePage />} />
+          <Route path="products" element={<ProductSearchPage />} />
+          <Route path="doctors" element={<DoctorSearchPage />} />
+          <Route path="booking" element={<AppointmentBookingPage />} />
+          <Route path="history" element={<HistoryPage />} />
           <Route path="profile" element={<CustomerProfilePage />} />
           <Route path="pets" element={<div className="p-8">My Pets Coming Soon</div>} />
           <Route path="appointments" element={<div className="p-8">Appointments Coming Soon</div>} />

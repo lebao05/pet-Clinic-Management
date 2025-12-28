@@ -156,54 +156,76 @@ class UserController {
     }
   }
 
-    // 1. Tìm kiếm sản phẩm (Tra cứu từ bảng Product và Inventory)
-    static async searchProducts(req, res) {
-        try {
-            const { branchId, name } = req.query;
+  // 1. Tìm kiếm sản phẩm (Tra cứu từ bảng Product và Inventory)
+  static async searchProducts(req, res) {
+    try {
+      const { branchId, name } = req.query;
 
-            if (!branchId || !name) {
-                return res.status(400).json({
-                    success: false,
-                    message: "branchId và name là bắt buộc"
-                });
-            }
+      if (!branchId || !name) {
+        return res.status(400).json({
+          success: false,
+          message: "branchId và name là bắt buộc"
+        });
+      }
 
-            const pool = await getConnection();
+      const pool = await getConnection();
 
-            const result = await pool.request()
-                .input("branchId", sql.Int, parseInt(branchId))
-                .input("name", sql.NVarChar(255), name.trim()) // truyền đúng chuỗi gốc
-                .query(`
-                    SELECT 
-                        p.ProductID,
-                        p.ProductName,
-                        i.StockQty,
-                        i.SellingPrice
-                    FROM Product p
-                    JOIN Inventory i ON p.ProductID = i.ProductID
-                    WHERE 
-                        i.BranchID = @branchId
-                        AND p.ProductName LIKE @name + N'%'
-                        AND i.IsActive = 1
-                        AND p.BusinessStatus = 'Active'
-                    ORDER BY p.ProductName
-                `);
+      const result = await pool.request()
+        .input("branchId", sql.Int, parseInt(branchId))
+        .input("name", sql.NVarChar(255), `%${name.trim()}%`)
+        .query(`
+          SELECT 
+            p.ProductID,
+            p.ProductName,
+            p.ProductType,
+            p.Unit,
+            i.StockQty,
+            i.SellingPrice
+          FROM Product p
+          JOIN Inventory i ON p.ProductID = i.ProductID
+          WHERE 
+            i.BranchID = @branchId
+            AND p.ProductName LIKE @name
+            AND i.IsActive = 1
+            AND p.BusinessStatus = 'Active'
+          ORDER BY p.ProductName
+        `);
 
-            res.json({
-                success: true,
-                data: result.recordset
-            });
+      res.json({
+        success: true,
+        data: result.recordset
+      });
 
-        } catch (err) {
-            console.error(err);
-            res.status(500).json({
-                success: false,
-                message: err.message
-            });
-        }
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({
+        success: false,
+        message: err.message
+      });
     }
+  }
 
-  // 2. Tra cứu bác sĩ tại chi nhánh
+  // 2. Lấy dịch vụ tại chi nhánh
+  static async getServicesByBranch(req, res) {
+    try {
+      const { branchId } = req.params;
+      const pool = await getConnection();
+      const result = await pool.request()
+        .input("branchId", sql.Int, branchId)
+        .query(`
+          SELECT DISTINCT s.ServiceID, s.ServiceName
+          FROM Service s
+          JOIN BranchService bs ON s.ServiceID = bs.ServiceID
+          WHERE bs.BranchID = @branchId
+          ORDER BY s.ServiceName
+        `);
+      res.json({ success: true, data: result.recordset });
+    } catch (err) {
+      res.status(500).json({ success: false, message: err.message });
+    }
+  }
+
+  // 3. Tra cứu bác sĩ tại chi nhánh
   static async getDoctorsByBranch(req, res) {
     try {
       const { branchId } = req.params;
@@ -223,33 +245,148 @@ class UserController {
     }
   }
 
-  // 3. Đặt lịch khám (Gọi Store Procedure sp_CreateAppointment)
-// controllers/customerController.js
-static async bookAppointment(req, res) {
+  // Search doctors by branch and name
+  static async searchDoctors(req, res) {
     try {
-        const { branchId, userId, petId, serviceId, doctorId, scheduleTime } = req.body;
-        const pool = await getConnection();
-        
-        // Fix: Chuyển "2025-12-30T10:00:00" thành "2025-12-30 10:00:00"
-        const formattedTime = scheduleTime.replace('T', ' ');
+      const { branchId } = req.params;
+      const { name } = req.query;
+      const pool = await getConnection();
+      const request = pool.request()
+        .input("branchId", sql.Int, branchId);
 
-        await pool.request()
-            .input("BranchID", sql.Int, branchId)
-            .input("UserID", sql.Int, userId)
-            .input("PetID", sql.Int, petId)
-            .input("ServiceID", sql.Int, serviceId)
-            .input("DoctorID", sql.Int, doctorId)
-            // Fix: Sử dụng sql.NVarChar để SQL tự CAST sang DateTime theo giờ "tĩnh"
-            .input("ScheduleTime", sql.NVarChar, formattedTime) 
-            .execute("sp_CreateAppointment");
+      let nameFilter = "";
+      if (name && name.trim()) {
+        request.input("name", sql.NVarChar, `%${name.trim()}%`);
+        nameFilter = "AND e.FullName LIKE @name";
+      }
 
-        res.json({ success: true, message: "Đặt lịch thành công!" });
+      const result = await request.query(`
+        SELECT e.EmployeeID, e.FullName, e.[Role]
+        FROM Employee e
+        JOIN EmployeeAssignment ea ON e.EmployeeID = ea.EmployeeID
+        WHERE ea.BranchID = @branchId AND ea.EndDate IS NULL
+        AND e.[Role] LIKE N'%Doctor%' AND e.WorkStatus = 'Active'
+        ${nameFilter}
+      `);
+      res.json({ success: true, data: result.recordset });
     } catch (err) {
-        res.status(400).json({ success: false, message: err.message });
+      res.status(500).json({ success: false, message: err.message });
     }
-}
+  }
 
-  // 4. Đặt mua sản phẩm (Trigger T4 sẽ tự động trừ kho)
+  // Get doctor schedule
+  static async getDoctorSchedule(req, res) {
+    try {
+      const { doctorId } = req.params;
+      const { date } = req.query;
+      const pool = await getConnection();
+      const request = pool.request()
+        .input("doctorId", sql.Int, doctorId);
+
+      let dateFilter = "";
+      if (date) {
+        request.input("date", sql.Date, date);
+        dateFilter = "AND CAST(a.ScheduleTime AS date) = @date";
+      }
+      console.log(date);
+      const result = await request.query(`
+        SELECT a.AppointmentID, a.ScheduleTime, a.[Status]
+        FROM Appointment a
+        WHERE a.DoctorID = @doctorId ${dateFilter}
+        ORDER BY a.ScheduleTime
+      `);
+      res.json({ success: true, data: result.recordset });
+    } catch (err) {
+      res.status(500).json({ success: false, message: err.message });
+    }
+  }
+
+  // Get doctor available time slots
+  static async getDoctorAvailableSlots(req, res) {
+    try {
+      const { doctorId } = req.params;
+      const { date, branchId } = req.query;
+      const pool = await getConnection();
+
+      // Get branch working hours
+      const branchResult = await pool.request()
+        .input("branchId", sql.Int, branchId)
+        .query("SELECT OpenTime, CloseTime FROM Branch WHERE BranchID = @branchId");
+
+      if (branchResult.recordset.length === 0) {
+        return res.status(404).json({ success: false, message: "Branch not found" });
+      }
+
+      const { OpenTime, CloseTime } = branchResult.recordset[0];
+
+      // Parse times
+      const openTime = OpenTime.split(':');
+      const closeTime = CloseTime.split(':');
+      const openHour = parseInt(openTime[0]);
+      const openMinute = parseInt(openTime[1]);
+      const closeHour = parseInt(closeTime[0]);
+      const closeMinute = parseInt(closeTime[1]);
+
+      // Generate time slots every 30 minutes
+      const slots = [];
+      let currentHour = openHour;
+      let currentMinute = openMinute;
+
+      while (currentHour < closeHour || (currentHour === closeHour && currentMinute < closeMinute)) {
+        const timeString = `${currentHour.toString().padStart(2, '0')}:${currentMinute.toString().padStart(2, '0')}`;
+        const scheduleTime = `${date}T${timeString}:00`;
+
+        // Check if doctor is available at this time
+        const checkResult = await pool.request()
+          .input("doctorId", sql.Int, doctorId)
+          .input("scheduleTime", sql.NVarChar, scheduleTime)
+          .query("SELECT dbo.fn_IsDoctorAvailable(@doctorId, CAST(@scheduleTime AS DATETIME)) as IsAvailable");
+
+        const isAvailable = checkResult.recordset[0].IsAvailable;
+
+        slots.push({
+          time: timeString,
+          available: isAvailable === 1
+        });
+
+        // Add 30 minutes
+        currentMinute += 30;
+        if (currentMinute >= 60) {
+          currentMinute = 0;
+          currentHour += 1;
+        }
+      }
+
+      res.json({ success: true, data: slots });
+    } catch (err) {
+      res.status(500).json({ success: false, message: err.message });
+    }
+  }
+
+  // 4. Đặt lịch khám
+  static async bookAppointment(req, res) {
+    try {
+      const { branchId, userId, petId, serviceId, doctorId, scheduleTime } = req.body;
+      const pool = await getConnection();
+      
+      const formattedTime = scheduleTime.replace('T', ' ');
+
+      await pool.request()
+        .input("BranchID", sql.Int, branchId)
+        .input("UserID", sql.Int, userId)
+        .input("PetID", sql.Int, petId)
+        .input("ServiceID", sql.Int, serviceId)
+        .input("DoctorID", sql.Int, doctorId)
+        .input("ScheduleTime", sql.NVarChar, formattedTime) 
+        .execute("sp_CreateAppointment");
+
+      res.json({ success: true, message: "Đặt lịch thành công!" });
+    } catch (err) {
+      res.status(400).json({ success: false, message: err.message });
+    }
+  }
+
+  // 5. Đặt mua sản phẩm
   static async checkout(req, res) {
     const { branchId, userId, items, paymentMethod } = req.body;
     const pool = await getConnection();
@@ -257,7 +394,6 @@ static async bookAppointment(req, res) {
     try {
       await transaction.begin();
       
-      // Tạo Invoice Header
       const headerRequest = new sql.Request(transaction);
       const headerResult = await headerRequest
         .input("BranchID", sql.Int, branchId)
@@ -269,7 +405,6 @@ static async bookAppointment(req, res) {
 
       const invoiceId = headerResult.output.NewInvoiceID;
 
-      // Thêm chi tiết sản phẩm
       for (const item of items) {
         await new sql.Request(transaction)
           .input("InvoiceID", sql.Int, invoiceId)
@@ -285,7 +420,7 @@ static async bookAppointment(req, res) {
     }
   }
 
-  // 5. Xem lịch sử (Hóa đơn và Hồ sơ khám)
+  // 6. Xem lịch sử
   static async getHistory(req, res) {
     try {
       const { userId } = req.params;
@@ -309,6 +444,20 @@ static async bookAppointment(req, res) {
     }
   }
 
+  // 7. Lấy danh sách chi nhánh
+  static async getBranches(req, res) {
+    try {
+      const pool = await getConnection();
+      const result = await pool.request().query(`
+        SELECT BranchID, BranchName, City
+        FROM Branch
+        ORDER BY BranchName
+      `);
+      res.json({ success: true, data: result.recordset });
+    } catch (err) {
+      res.status(500).json({ success: false, message: err.message });
+    }
+  }
 }
 
 module.exports = UserController;
