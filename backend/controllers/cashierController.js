@@ -40,7 +40,8 @@ const CashierController = {
   // Create a simple walk-in appointment
   async createWalkin(req, res, next) {
     try {
-      const { branchId, userId, petId, serviceId, staffId } = req.body || {};
+      // accept doctorId instead of staffId (doctor optional)
+      const { branchId, userId, petId, serviceId, doctorId } = req.body || {};
       const bId = branchId ? Number(branchId) : null;
       const uId = userId ? Number(userId) : null;
       const pId = petId ? Number(petId) : null;
@@ -53,16 +54,23 @@ const CashierController = {
       rq.input("UserID", sql.Int, uId);
       rq.input("PetID", sql.Int, pId);
       rq.input("ServiceID", sql.Int, serviceId ? Number(serviceId) : null);
-      rq.input("StaffID", sql.Int, staffId ? Number(staffId) : null);
+      rq.input("DoctorID", sql.Int, doctorId ? Number(doctorId) : null);
+      // set schedule time to now (today)
       rq.input("ScheduleTime", sql.DateTime, new Date());
 
-  // Some schemas may not have StaffID column; keep the insert minimal to be compatible.
-  const q = `INSERT INTO dbo.Appointment (ScheduleTime, [Status], BranchID, UserID, PetID, ServiceID)
-         VALUES (@ScheduleTime, 'Booked', @BranchID, @UserID, @PetID, @ServiceID);
-         SELECT SCOPE_IDENTITY() AS AppointmentID;`;
+      // Insert appointment and optionally record DoctorID (may be NULL)
+    const q = `INSERT INTO dbo.Appointment (ScheduleTime, [Status], BranchID, UserID, PetID, ServiceID, DoctorID)
+      VALUES (@ScheduleTime, 'Booked', @BranchID, @UserID, @PetID, @ServiceID, @DoctorID);
+      SELECT SCOPE_IDENTITY() AS AppointmentID;`;
 
       const r = await rq.query(q);
-      return res.status(201).json({ appointmentId: r.recordset[0].AppointmentID });
+      const rawId = r.recordset && r.recordset[0] ? r.recordset[0].AppointmentID || r.recordset[0].AppointmentId || r.recordset[0].AppointmentID : null;
+      const appointmentId = rawId ? Number(rawId) : null;
+      if (!appointmentId) {
+        return res.status(500).json({ message: 'Failed to create appointment' });
+      }
+      // return created appointment id and basic info
+      return res.status(201).json({ appointmentId, appointment: { appointmentId, scheduleTime: rq.parameters?.ScheduleTime?.value || new Date(), status: 'Booked', branchId: bId, userId: uId, petId: pId, serviceId: serviceId ? Number(serviceId) : null, doctorId: doctorId ? Number(doctorId) : null } });
     } catch (err) {
       return next(err);
     }
@@ -121,6 +129,67 @@ const CashierController = {
           cashier: { employeeId: r.EmployeeID, fullName: r.StaffName },
         }))
       );
+    } catch (err) {
+      return next(err);
+    }
+  },
+
+  // List appointments for cashier search (used to verify walk-in appointments)
+  async listAppointments(req, res, next) {
+    try {
+      const branchId = req.query.branchId ? Number(req.query.branchId) : null;
+      const userId = req.query.userId ? Number(req.query.userId) : null;
+      const petId = req.query.petId ? Number(req.query.petId) : null;
+      const serviceId = req.query.serviceId ? Number(req.query.serviceId) : null;
+      const doctorId = req.query.doctorId ? Number(req.query.doctorId) : null;
+      const status = req.query.status || null;
+      const from = req.query.from ? new Date(req.query.from) : null;
+      const to = req.query.to ? new Date(req.query.to) : null;
+
+      const pool = await getConnection();
+      const rq = pool.request();
+      rq.input("BranchID", sql.Int, branchId);
+      rq.input("UserID", sql.Int, userId);
+      rq.input("PetID", sql.Int, petId);
+      rq.input("ServiceID", sql.Int, serviceId);
+      rq.input("DoctorID", sql.Int, doctorId);
+      rq.input("Status", sql.NVarChar(50), status);
+      rq.input("From", sql.DateTime, from);
+      rq.input("To", sql.DateTime, to);
+
+      const q = `SELECT TOP (200)
+        a.AppointmentID, a.ScheduleTime, a.Status, a.BranchID, b.BranchName,
+        a.ServiceID, s.ServiceName, s.ServiceType,
+        a.DoctorID, e.FullName AS DoctorName,
+        a.UserID, u.FullName AS UserName,
+        a.PetID, p.PetName
+      FROM dbo.Appointment a
+      LEFT JOIN dbo.Branch b ON b.BranchID = a.BranchID
+      LEFT JOIN dbo.Service s ON s.ServiceID = a.ServiceID
+      LEFT JOIN dbo.Employee e ON e.EmployeeID = a.DoctorID
+      LEFT JOIN dbo.Users u ON u.UserID = a.UserID
+      LEFT JOIN dbo.Pet p ON p.PetID = a.PetID
+      WHERE (@BranchID IS NULL OR a.BranchID = @BranchID)
+        AND (@UserID IS NULL OR a.UserID = @UserID)
+        AND (@PetID IS NULL OR a.PetID = @PetID)
+        AND (@ServiceID IS NULL OR a.ServiceID = @ServiceID)
+        AND (@DoctorID IS NULL OR a.DoctorID = @DoctorID)
+        AND (@Status IS NULL OR a.Status = @Status)
+        AND (@From IS NULL OR a.ScheduleTime >= @From)
+        AND (@To IS NULL OR a.ScheduleTime <= @To)
+      ORDER BY a.ScheduleTime DESC`;
+
+      const result = await rq.query(q);
+      return res.json(result.recordset.map((r) => ({
+        appointmentId: r.AppointmentID,
+        scheduleTime: r.ScheduleTime,
+        status: r.Status,
+        branch: { branchId: r.BranchID, name: r.BranchName },
+        service: { serviceId: r.ServiceID, name: r.ServiceName, type: r.ServiceType },
+        doctor: r.DoctorID ? { doctorId: r.DoctorID, fullName: r.DoctorName } : null,
+        user: { userId: r.UserID, fullName: r.UserName },
+        pet: { petId: r.PetID, name: r.PetName },
+      })));
     } catch (err) {
       return next(err);
     }

@@ -10,11 +10,11 @@ const CashierPosPage = () => {
   const [pets, setPets] = useState([]);
   const [checkedPet, setCheckedPet] = useState(null);
   const [searchResults, setSearchResults] = useState([]);
-  const [searchFilters, setSearchFilters] = useState({ branchId: 1, userId: "", petId: "", staffId: "", serviceId: "" });
+  const [searchFilters, setSearchFilters] = useState({ branchId: null, userId: "", petId: "", doctorId: "", serviceId: "" });
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const [walkin, setWalkin] = useState({ branchId: 1, userId: "", petId: "", serviceId: "", staffId: "" });
+  const [walkin, setWalkin] = useState({ branchId: "", userId: "", petId: "", serviceId: "", doctorId: "" });
 
   const searchPets = async (e) => {
     if (e) e.preventDefault();
@@ -28,7 +28,17 @@ const CashierPosPage = () => {
         return;
       }
       const res = await axiosClient.get(`/cashier/pets/${searchPetId}`, { params: { userId: searchUserId } });
-      setCheckedPet(res.data);
+      const r = res.data && res.data.data ? res.data.data : res.data;
+      const p = r || null;
+      const normalized = p ? ({
+        petId: p.PetID || p.petId,
+        name: p.PetName || p.name || p.Name,
+        breed: p.Breed || p.breed,
+        owner: p.Owner || p.owner || { fullName: p.OwnerName || p.FullName, phone: p.Phone },
+        hasHistory: typeof p.hasHistory !== 'undefined' ? p.hasHistory : p.HasHistory || false,
+        isOwnerMatch: typeof p.isOwnerMatch !== 'undefined' ? p.isOwnerMatch : true,
+      }) : null;
+      setCheckedPet(normalized);
       setPets([]);
     } catch (err) {
       setError(err.response?.data?.message || "Failed to search pet");
@@ -39,6 +49,8 @@ const CashierPosPage = () => {
     }
   };
 
+  // NOTE: dropdown/autoload behavior removed per request — fields are free-text inputs now.
+
   const searchInvoices = async (e) => {
     if (e) e.preventDefault();
     setError("");
@@ -48,13 +60,13 @@ const CashierPosPage = () => {
       if (searchFilters.branchId) params.branchId = Number(searchFilters.branchId);
       if (searchFilters.userId) params.userId = Number(searchFilters.userId);
       if (searchFilters.petId) params.petId = Number(searchFilters.petId);
-      if (searchFilters.staffId) params.staffId = Number(searchFilters.staffId);
+      if (searchFilters.doctorId) params.doctorId = Number(searchFilters.doctorId);
       if (searchFilters.serviceId) params.serviceId = Number(searchFilters.serviceId);
 
-      const res = await axiosClient.get("/cashier/invoices", { params });
+      const res = await axiosClient.get("/cashier/appointments", { params });
       setSearchResults(Array.isArray(res.data) ? res.data : []);
     } catch (err) {
-      setError(err.response?.data?.message || "Failed to search invoices");
+      setError(err.response?.data?.message || "Failed to search appointments");
       setSearchResults([]);
     } finally {
       setLoading(false);
@@ -70,7 +82,7 @@ const CashierPosPage = () => {
         userId: Number(walkin.userId),
         petId: Number(walkin.petId),
         serviceId: walkin.serviceId ? Number(walkin.serviceId) : null,
-        staffId: walkin.staffId ? Number(walkin.staffId) : null,
+        doctorId: walkin.doctorId ? Number(walkin.doctorId) : null,
       };
       const res = await axiosClient.post("/cashier/walkin", payload);
       alert(`Created walk-in appointment #${res.data.appointmentId}`);
@@ -127,7 +139,7 @@ const CashierPosPage = () => {
         <h2 className="font-medium">Create walk-in appointment</h2>
         <form onSubmit={createWalkin} className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-3">
           <div>
-            <label className="text-sm text-neutral-600">BranchID</label>
+            <label className="text-sm text-neutral-600">Branch (required)</label>
             <Input value={walkin.branchId} onChange={(e) => setWalkin({ ...walkin, branchId: e.target.value })} />
           </div>
           <div>
@@ -135,29 +147,29 @@ const CashierPosPage = () => {
             <Input value={walkin.userId} onChange={(e) => setWalkin({ ...walkin, userId: e.target.value })} />
           </div>
           <div>
-            <label className="text-sm text-neutral-600">PetID (required)</label>
+            <label className="text-sm text-neutral-600">Pet (required) — enter PetID</label>
             <Input value={walkin.petId} onChange={(e) => setWalkin({ ...walkin, petId: e.target.value })} />
           </div>
           <div>
-            <label className="text-sm text-neutral-600">ServiceID (optional)</label>
+            <label className="text-sm text-neutral-600">Service (required) — enter ServiceID</label>
             <Input value={walkin.serviceId} onChange={(e) => setWalkin({ ...walkin, serviceId: e.target.value })} />
           </div>
           <div>
-            <label className="text-sm text-neutral-600">StaffID (optional)</label>
-            <Input value={walkin.staffId} onChange={(e) => setWalkin({ ...walkin, staffId: e.target.value })} />
+            <label className="text-sm text-neutral-600">Doctor (enter EmployeeID or leave blank)</label>
+            <Input value={walkin.doctorId} onChange={(e) => setWalkin({ ...walkin, doctorId: e.target.value })} />
           </div>
           <div className="flex items-center gap-2">
-            <Button type="submit" variant="dark" disabled={!walkin.userId || !walkin.petId}>Create walk-in</Button>
+            <Button type="submit" variant="dark" disabled={!walkin.branchId || !walkin.userId || !walkin.petId || !walkin.serviceId}>Create walk-in</Button>
           </div>
         </form>
       </Card>
 
       <Card className="p-4">
-        <h2 className="font-medium">Search invoices (optional filters)</h2>
+        <h2 className="font-medium">Search appointments (optional filters)</h2>
         <form onSubmit={searchInvoices} className="grid grid-cols-1 md:grid-cols-6 gap-3 mt-3">
           <div>
-            <label className="text-sm text-neutral-600">BranchID</label>
-            <Input value={searchFilters.branchId} onChange={(e) => setSearchFilters({ ...searchFilters, branchId: e.target.value })} />
+            <label className="text-sm text-neutral-600">Branch</label>
+            <Input value={searchFilters.branchId || ""} onChange={(e) => setSearchFilters({ ...searchFilters, branchId: e.target.value })} />
           </div>
           <div>
             <label className="text-sm text-neutral-600">UserID</label>
@@ -168,12 +180,12 @@ const CashierPosPage = () => {
             <Input value={searchFilters.petId} onChange={(e) => setSearchFilters({ ...searchFilters, petId: e.target.value })} />
           </div>
           <div>
-            <label className="text-sm text-neutral-600">StaffID</label>
-            <Input value={searchFilters.staffId} onChange={(e) => setSearchFilters({ ...searchFilters, staffId: e.target.value })} />
+            <label className="text-sm text-neutral-600">Doctor</label>
+            <Input value={searchFilters.doctorId || ""} onChange={(e) => setSearchFilters({ ...searchFilters, doctorId: e.target.value })} />
           </div>
           <div>
-            <label className="text-sm text-neutral-600">ServiceID</label>
-            <Input value={searchFilters.serviceId} onChange={(e) => setSearchFilters({ ...searchFilters, serviceId: e.target.value })} />
+            <label className="text-sm text-neutral-600">Service</label>
+            <Input value={searchFilters.serviceId || ""} onChange={(e) => setSearchFilters({ ...searchFilters, serviceId: e.target.value })} />
           </div>
           <div className="flex items-end">
             <Button type="submit" variant="dark" disabled={loading}>{loading ? 'Searching...' : 'Search'}</Button>
@@ -182,19 +194,14 @@ const CashierPosPage = () => {
 
         <div className="mt-4">
           {searchResults.length === 0 ? (
-            <div className="text-neutral-500">No invoices</div>
+            <div className="text-neutral-500">No appointments</div>
           ) : (
             <div className="space-y-2">
               {searchResults.map((r) => (
-                <div key={r.invoiceId} className="p-2 border rounded flex justify-between items-center">
-                  <div>
-                    <div className="font-medium">Invoice #{r.invoiceId}</div>
-                    <div className="text-xs text-neutral-500">{new Date(r.invoiceDate).toLocaleString()} — {r.user?.fullName}</div>
-                  </div>
-                  <div className="text-right">
-                    <div className="font-semibold">{r.finalAmount}</div>
-                    <Button variant="outline" size="sm" onClick={() => window.location.assign(`/cashier/invoices/${r.invoiceId}`)}>View</Button>
-                  </div>
+                <div key={r.appointmentId} className="p-2 border rounded">
+                  <div className="font-medium">Appointment #{r.appointmentId} — {r.service?.name}</div>
+                  <div className="text-xs text-neutral-500">{new Date(r.scheduleTime).toLocaleString()} — {r.status} — Branch: {r.branch?.name}</div>
+                  <div className="text-xs">Patient: {r.pet?.name} • Customer: {r.user?.fullName} {r.doctor ? `• Doctor: ${r.doctor.fullName}` : ''}</div>
                 </div>
               ))}
             </div>
