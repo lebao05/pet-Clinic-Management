@@ -134,10 +134,10 @@ const DoctorAppointmentDetailPage = () => {
           <div className="text-sm text-neutral-600">{new Date(data.scheduleTime).toLocaleString()}</div>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" onClick={() => navigate(-1)}>
+          <Button variant="dark" onClick={() => navigate(-1)}>
             Back
           </Button>
-          <Button onClick={load} disabled={saving}>
+          <Button variant="dark" onClick={load} disabled={saving}>
             Refresh
           </Button>
         </div>
@@ -179,7 +179,7 @@ const DoctorAppointmentDetailPage = () => {
             <div className="text-xs text-neutral-500 mt-1">Auto-save on change</div>
           </div>
           <div className="flex items-end">
-            <Button variant="outline" fullWidth disabled={saving} onClick={() => updateStatus("Completed")}
+            <Button variant="dark" fullWidth disabled={saving} onClick={() => updateStatus("Completed")}
             >
               Mark Completed
             </Button>
@@ -245,7 +245,7 @@ const DoctorAppointmentDetailPage = () => {
         </div>
 
         <div className="mt-4">
-          <Button onClick={saveExam} disabled={saving}>
+          <Button variant="dark" onClick={saveExam} disabled={saving}>
             {saving ? "Saving..." : "Save exam record"}
           </Button>
         </div>
@@ -370,7 +370,7 @@ const DoctorAppointmentDetailPage = () => {
         </div>
 
         <div className="mt-4">
-          <Button onClick={saveVaccination} disabled={saving}>
+          <Button variant="dark" onClick={saveVaccination} disabled={saving}>
             {saving ? "Saving..." : "Save vaccination record"}
           </Button>
         </div>

@@ -1,109 +1,90 @@
 // src/features/customer/pages/HomePage.jsx
 import React from "react";
 import { Link } from "react-router-dom";
-import Button from "../../../shared/components/ui/Button";
-import {Card} from "../../../shared/components/ui/Card";
+import { useAuth } from "../../../contexts/AuthContext";
+import { Card } from "../../../shared/components/ui/Card";
+import { Calendar, Heart, CreditCard, Stethoscope, ShoppingBag } from "lucide-react";
 
 const HomePage = () => {
+  const { user } = useAuth();
+
   return (
     <div className="container mx-auto px-6 py-8">
       {/* Hero Banner */}
-      <div
-        className="relative rounded-2xl overflow-hidden h-96 mb-8"
-        style={{
-          backgroundImage: "url(https://images.unsplash.com/photo-1548199973-03cce0bbc87b?w=1200)",
-          backgroundSize: "cover",
-          backgroundPosition: "center",
-        }}
-      >
-        <div className="absolute inset-0 bg-gradient-to-r from-black/60 to-transparent"></div>
-        <div className="relative h-full flex flex-col justify-center px-12 text-white">
-          <h1 className="text-5xl font-bold mb-4">Welcome back, John!</h1>
-          <p className="text-xl mb-6 max-w-xl text-white/90">
-            Your trusted partner in pet care. We're here to help ensure your furry friends are happy and healthy.
-          </p>
-          <div>
-            <Button size="lg" variant="secondary">
-              Book a New Appointment
-            </Button>
-          </div>
-        </div>
+      <div className="bg-gradient-to-r from-teal-500 to-cyan-600 rounded-2xl p-8 mb-8 text-white">
+        <h1 className="text-4xl font-bold mb-4">
+          Chào mừng trở lại, {user?.firstName || user?.name || 'Khách hàng'}!
+        </h1>
+        <p className="text-xl mb-6 max-w-2xl text-white/90">
+          Đối tác tin cậy của bạn trong chăm sóc thú cưng. Chúng tôi ở đây để giúp đảm bảo thú cưng của bạn luôn vui vẻ và khỏe mạnh.
+        </p>
+        <Link
+          to="/customer/booking"
+          className="inline-flex items-center px-6 py-3 bg-white text-teal-600 font-semibold rounded-lg hover:bg-gray-100 transition-colors"
+        >
+          <Calendar className="h-5 w-5 mr-2" />
+          Đặt lịch hẹn mới
+        </Link>
       </div>
 
       {/* Quick Access */}
-      <h2 className="text-2xl font-bold mb-6 text-neutral-900">Quick Access</h2>
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
-        <Card hover>
-          <div className="h-40 rounded-lg bg-rose-100 mb-4 flex items-center justify-center overflow-hidden">
-            <img
-              src="https://images.unsplash.com/photo-1506755855567-92ff770e8d00?w=400"
-              alt="Calendar"
-              className="w-full h-full object-cover"
-            />
+      <h2 className="text-2xl font-bold mb-6 text-neutral-900">Truy cập nhanh</h2>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-12">
+        <Card className="p-6 hover:shadow-lg transition-shadow">
+          <div className="flex items-center mb-4">
+            <Calendar className="h-8 w-8 text-teal-600 mr-3" />
+            <h3 className="font-bold text-lg">Cuộc hẹn</h3>
           </div>
-          <h3 className="font-bold text-lg mb-2">Upcoming Appointments</h3>
-          <p className="text-neutral-600 text-sm mb-4">Your next visit is on Oct 26.</p>
-          <Link to="/customer/appointments" className="text-secondary-600 font-medium hover:text-secondary-700">
-            View all →
+          <p className="text-neutral-600 text-sm mb-4">Xem và quản lý các cuộc hẹn của bạn.</p>
+          <Link to="/customer/appointments" className="text-teal-600 font-medium hover:text-teal-700">
+            Xem tất cả →
           </Link>
         </Card>
 
-        <Card hover>
-          <div className="h-40 rounded-lg bg-amber-100 mb-4 flex items-center justify-center overflow-hidden">
-            <img
-              src="https://images.unsplash.com/photo-1514888286974-6c03e2ca1dba?w=400"
-              alt="Pet"
-              className="w-full h-full object-cover"
-            />
+        <Card className="p-6 hover:shadow-lg transition-shadow">
+          <div className="flex items-center mb-4">
+            <Heart className="h-8 w-8 text-rose-600 mr-3" />
+            <h3 className="font-bold text-lg">Thú cưng của tôi</h3>
           </div>
-          <h3 className="font-bold text-lg mb-2">My Pet's Profiles</h3>
-          <p className="text-neutral-600 text-sm mb-4">Manage your pet's health records.</p>
-          <Link to="/customer/pets" className="text-secondary-600 font-medium hover:text-secondary-700">
-            Manage pets →
+          <p className="text-neutral-600 text-sm mb-4">Quản lý hồ sơ sức khỏe thú cưng.</p>
+          <Link to="/customer/pets" className="text-teal-600 font-medium hover:text-teal-700">
+            Quản lý thú cưng →
           </Link>
         </Card>
 
-        <Card hover>
-          <div className="h-40 rounded-lg bg-sky-100 mb-4 flex items-center justify-center overflow-hidden">
-            <img
-              src="https://images.unsplash.com/photo-1554224311-beee4ece8070?w=400"
-              alt="Billing"
-              className="w-full h-full object-cover"
-            />
+        <Card className="p-6 hover:shadow-lg transition-shadow">
+          <div className="flex items-center mb-4">
+            <CreditCard className="h-8 w-8 text-amber-600 mr-3" />
+            <h3 className="font-bold text-lg">Lịch sử thanh toán</h3>
           </div>
-          <h3 className="font-bold text-lg mb-2">Billing History</h3>
-          <p className="text-neutral-600 text-sm mb-4">View your latest invoices.</p>
-          <Link to="/customer/billing" className="text-secondary-600 font-medium hover:text-secondary-700">
-            View history →
+          <p className="text-neutral-600 text-sm mb-4">Xem hóa đơn và lịch sử thanh toán.</p>
+          <Link to="/customer/billing" className="text-teal-600 font-medium hover:text-teal-700">
+            Xem lịch sử →
+          </Link>
+        </Card>
+
+        <Card className="p-6 hover:shadow-lg transition-shadow">
+          <div className="flex items-center mb-4">
+            <Stethoscope className="h-8 w-8 text-blue-600 mr-3" />
+            <h3 className="font-bold text-lg">Tìm bác sĩ</h3>
+          </div>
+          <p className="text-neutral-600 text-sm mb-4">Tìm và đặt lịch với bác sĩ chuyên khoa.</p>
+          <Link to="/customer/doctors" className="text-teal-600 font-medium hover:text-teal-700">
+            Tìm bác sĩ →
+          </Link>
+        </Card>
+
+        <Card className="p-6 hover:shadow-lg transition-shadow">
+          <div className="flex items-center mb-4">
+            <ShoppingBag className="h-8 w-8 text-green-600 mr-3" />
+            <h3 className="font-bold text-lg">Sản phẩm</h3>
+          </div>
+          <p className="text-neutral-600 text-sm mb-4">Mua sắm sản phẩm chăm sóc thú cưng.</p>
+          <Link to="/customer/products" className="text-teal-600 font-medium hover:text-teal-700">
+            Xem sản phẩm →
           </Link>
         </Card>
       </div>
-
-      {/* Upcoming Appointments */}
-      <h2 className="text-2xl font-bold mb-6 text-neutral-900">Upcoming Appointments</h2>
-      <Card className="mb-8">
-        <div className="flex items-center gap-6">
-          <div className="w-20 h-20 bg-secondary-500 rounded-lg flex flex-col items-center justify-center text-white">
-            <span className="text-xs uppercase">OCT</span>
-            <span className="text-3xl font-bold">26</span>
-          </div>
-          <div className="flex-1">
-            <h3 className="font-bold text-lg mb-1">Annual Check-up for Buddy</h3>
-            <p className="text-neutral-600 text-sm">with Dr. Emily Carter</p>
-          </div>
-          <div className="flex items-center gap-6 text-sm text-neutral-600">
-            <div className="flex items-center gap-2">
-              <span>🕐</span>
-              <span>10:30 AM</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <span>📍</span>
-              <span>Main Street Clinic</span>
-            </div>
-          </div>
-          <Button variant="outline">View Details</Button>
-        </div>
-      </Card>
     </div>
   );
 };

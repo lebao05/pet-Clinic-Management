@@ -21,9 +21,9 @@ getConnection()
   });
 
 // Import routes
-// const userRoutes = require("./routes/userRoutes");
+const userRoutes = require("./routes/userRoutes");
 // const petRoutes = require("./routes/petRoutes");
-// const appointmentRoutes = require("./routes/appointmentRoutes");
+const appointmentRoutes = require("./routes/appointmentRoutes");
 const companyOwnerRoutes = require("./routes/companyOwnerRoute");
 const branchManagerRoutes = require("./routes/branchManagerRoutes");
 
@@ -32,9 +32,9 @@ const doctorRoutes = require("./routes/doctorRoutes");
 const cashierRoutes = require("./routes/cashierRoutes");
 
 // Use routes
-// app.use("/api/users", userRoutes);
+app.use("/api/user", userRoutes);
 // app.use("/api/pets", petRoutes);
-// app.use("/api/appointments", appointmentRoutes);
+app.use("/api/appointments", appointmentRoutes);
 app.use("/api/company-owner", companyOwnerRoutes);
 app.use("/api/branch-manager", branchManagerRoutes);
 app.use("/api/doctor", doctorRoutes);
