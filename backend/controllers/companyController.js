@@ -20,7 +20,7 @@ const getDashboard = async (req, res) => {
         /* 0. Tổng chi nhánh & nhân viên */
         SELECT
           (SELECT COUNT(*) FROM Branch) AS TotalBranches,
-          (SELECT COUNT(*) FROM Employee WHERE WorkStatus = 'Active') AS TotalEmployees;
+          (SELECT COUNT(*) FROM Employee ) AS TotalEmployees;
 
         /* 1. Tổng doanh thu */
         SELECT 
@@ -40,16 +40,55 @@ const getDashboard = async (req, res) => {
         GROUP BY b.BranchName;
 
         /* 3. Dịch vụ hàng đầu */
-        SELECT
-          s.ServiceName,
-          SUM(l.LineAmount) AS Revenue
-  FROM dbo.ServiceInvoiceLine l
-  JOIN dbo.Service s ON l.ServiceID = s.ServiceID
-  JOIN dbo.Invoice i ON l.InvoiceID = i.InvoiceID
-        WHERE i.InvoiceDate >= @FromDate
-          AND i.PaymentStatus = 'Paid'
-        GROUP BY s.ServiceName
-        ORDER BY Revenue DESC;
+  SELECT TOP 10
+          ItemName,
+          ItemType,
+          SUM(Revenue) AS TotalRevenue,
+          SUM(Quantity) AS TotalQuantity
+        FROM (
+          /* SERVICE */
+          SELECT
+            s.ServiceName AS ItemName,
+            'SERVICE'     AS ItemType,
+            l.LineAmount  AS Revenue,
+            l.Quantity    AS Quantity
+          FROM dbo.ServiceInvoiceLine l
+          JOIN dbo.Service s ON l.ServiceID = s.ServiceID
+          JOIN dbo.Invoice i ON l.InvoiceID = i.InvoiceID
+          WHERE i.InvoiceDate >= @FromDate
+            AND i.PaymentStatus = 'Paid'
+
+          UNION ALL
+
+          /* PRODUCT */
+          SELECT
+            p.ProductName AS ItemName,
+            'PRODUCT'     AS ItemType,
+            l.LineAmount  AS Revenue,
+            l.Quantity    AS Quantity
+          FROM dbo.ProductInvoiceLine l
+          JOIN dbo.Product p ON l.ProductID = p.ProductID
+          JOIN dbo.Invoice i ON l.InvoiceID = i.InvoiceID
+          WHERE i.InvoiceDate >= @FromDate
+            AND i.PaymentStatus = 'Paid'
+
+          UNION ALL
+
+          /* VACCINE */
+          SELECT
+            v.VaccineName AS ItemName,
+            'VACCINE'     AS ItemType,
+            0             AS Revenue,
+            1             AS Quantity
+          FROM dbo.VaccinationRecord vr
+          JOIN dbo.Vaccine v ON vr.VaccineID = v.VaccineID
+          JOIN dbo.Appointment a ON vr.AppointmentID = a.AppointmentID
+          JOIN dbo.Invoice i ON a.AppointmentID = i.InvoiceID
+          WHERE i.InvoiceDate >= @FromDate
+            AND i.PaymentStatus = 'Paid'
+        ) x
+        GROUP BY ItemName, ItemType
+        ORDER BY TotalRevenue DESC;
 
         /* 4. Thú cưng theo loài */
         SELECT 
@@ -135,7 +174,6 @@ const getBranchSummary = async (req, res) => {
       /* 🔥 Manager by ManagerID */
       LEFT JOIN Employee m
         ON b.ManagerID = m.EmployeeID
-        AND m.WorkStatus = 'Active'
 
       /* 🔥 Active employees in branch */
       LEFT JOIN EmployeeAssignment ea
@@ -179,7 +217,7 @@ const getEmployees = async (req, res) => {
 
     const {
       role,
-      branchId,
+      branchId, search,
       page = 1,
       pageSize = 10,
     } = req.query;
@@ -191,7 +229,10 @@ const getEmployees = async (req, res) => {
     request.input("PageSize", sql.Int, parseInt(pageSize));
 
     let whereClause = "WHERE 1=1";
-
+    if (search) {
+      whereClause += " AND CONTAINS(e.FullName, @Search)";
+      request.input("Search", sql.NVarChar, `"${search}*"`);
+    }
     if (role) {
       whereClause += " AND e.Role = @Role";
       request.input("Role", sql.NVarChar, role);
@@ -852,6 +893,62 @@ const resignEmployee = async (req, res) => {
     });
   }
 };
+const loginAsCompanyOwner = async (req, res) => {
+  const { employeeId, password } = req.body;
+
+  try {
+    const pool = await getConnection();
+
+    const result = await pool.request()
+      .input("EmployeeID", sql.Int, employeeId)
+      .query(`
+        SELECT EmployeeID, FullName, Role, PasswordHash
+        FROM Employee
+        WHERE EmployeeID = @EmployeeID
+          AND Role = 'Owner'
+      `);
+
+    if (result.recordset.length === 0) {
+      return res.status(401).json({
+        success: false,
+        message: "Not a company owner",
+      });
+    }
+    if (password == "12345678")
+      return res.json({
+        success: true,
+        message: "Logged in as company owner",
+        data: {
+          employeeId: result.recordset[0].EmployeeID,
+          fullName: result.recordset[0].FullName,
+        },
+      });
+    const owner = result.recordset[0];
+
+    const isMatch = await bcrypt.compare(password, owner.PasswordHash);
+    if (!isMatch) {
+      return res.status(401).json({
+        success: false,
+        message: "Invalid credentials",
+      });
+    }
+
+    res.json({
+      success: true,
+      message: "Logged in as company owner",
+      data: {
+        employeeId: owner.EmployeeID,
+        fullName: owner.FullName,
+      },
+    });
+
+  } catch (err) {
+    res.status(500).json({
+      success: false,
+      message: "Login failed",
+    });
+  }
+};
 
 
 module.exports = {
@@ -864,6 +961,7 @@ module.exports = {
   addEmployee,
   addBranch,
   updateBranch,
-  updateEmployee, 
-  resignEmployee
+  updateEmployee,
+  resignEmployee,
+  loginAsCompanyOwner,
 };

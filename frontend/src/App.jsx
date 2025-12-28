@@ -13,6 +13,7 @@ import ReceptionistRoutes from "./routes/ReceptionistRoutes";
 import AdminRoutes from "./routes/AdminRoutes";
 import DoctorRoutes from "./routes/DoctorRoutes";
 import CashierRoutes from "./routes/CashierRoutes";
+import OwnerLogin from "./features/companyAdmin/pages/OwnerLogin";
 
 function App() {
   return (
@@ -26,7 +27,7 @@ function App() {
           <Route path="appointments" element={<div className="p-8">Appointments Coming Soon</div>} />
           <Route path="billing" element={<div className="p-8">Billing Coming Soon</div>} />
         </Route>
-
+        <Route path="/admin/login" element={<OwnerLogin />} />
         {/* Branch Manager Routes */}
         <Route path="/manager/*" element={<ManagerRoutes />} />
 

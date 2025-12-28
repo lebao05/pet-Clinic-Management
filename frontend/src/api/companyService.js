@@ -18,17 +18,23 @@ export const addBranch = async ({ branchName, address, phone, openTime, closeTim
 }
 
 export const addEmployee = async ({
-    name,
-    phone,
+    fullName,
     role,
     branchId,
     dateOfBirth,
     gender,
     baseSalary,
 }) => {
+    console.log("Adding Employee with data:", {
+        fullName,
+        role,
+        branchId,
+        dateOfBirth,
+        gender,
+        baseSalary,
+    });
     const response = await axios.post("/company-owner/add-employee", {
-        fullName: name,
-        phone,
+        fullName,
         role,
         branchId,
         dateOfBirth,
@@ -41,9 +47,9 @@ export const addEmployee = async ({
     console.log("Add Employee Response:", response);
     return response.data;
 };
-export const getEmployees = async ({ role, branchId, page, pageSize }) => {
+export const getEmployees = async ({ role, branchId, page, pageSize, search }) => {
     const response = await axios.get("/company-owner/employees", {
-        params: { role, branchId, page, pageSize }
+        params: { role, branchId, page, pageSize, search }
     });
     console.log("Employees Response:", response);
     return response.data;
@@ -97,5 +103,11 @@ export const updateEmployee = async (
 export const resignEmployee = async (employeeId) => {
     const response = await axios.put(`/company-owner/resign-employee/${employeeId}`);
     console.log("Resign Employee Response:", response);
+    return response.data;
+}
+
+export const loginOwner = async (employeeId, password) => {
+    const response = await axios.post("/auth/company-owner/login", { employeeId, password });
+    console.log("Login Owner Response:", response);
     return response.data;
 }

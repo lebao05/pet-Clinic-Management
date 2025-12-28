@@ -2,8 +2,17 @@
 
 import { useState, useEffect } from "react"
 import { Search, Plus, Eye, X, Loader2, Calendar, MapPin, Briefcase, User, CircleDollarSign, ArrowRightLeft, Edit2, Save, Filter, UserX } from "lucide-react"
-// Import API Services - Added resignEmployee
-import { getEmployees, getBranches, getEmployeeRoles, addEmployee, assignEmployeeToBranch, updateEmployee, resignEmployee } from "../../../api/companyService"
+
+// Ensure this path matches your project structure
+import { 
+  getEmployees, 
+  getBranches, 
+  getEmployeeRoles, 
+  addEmployee, 
+  assignEmployeeToBranch, 
+  updateEmployee, 
+  resignEmployee 
+} from "../../../api/companyService"
 
 export default function EmployeesPage() {
   // --- DATA & UI STATES ---
@@ -13,14 +22,13 @@ export default function EmployeesPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [isMoving, setIsMoving] = useState(false)
-  
-  // Resign Loading State
   const [isResigning, setIsResigning] = useState(false)
 
+  // Modal States
   const [selectedEmployee, setSelectedEmployee] = useState(null)
   const [isDetailOpen, setIsDetailOpen] = useState(false)
-  const [activeTab, setActiveTab] = useState("info")
   const [isAddOpen, setIsAddOpen] = useState(false)
+  const [activeTab, setActiveTab] = useState("info")
 
   // --- EDIT STATE ---
   const [isEditing, setIsEditing] = useState(false)
@@ -29,6 +37,16 @@ export default function EmployeesPage() {
     gender: "Male",
     dateOfBirth: "",
     role: "",
+    baseSalary: 0
+  })
+
+  // --- ADD NEW EMPLOYEE STATE ---
+  const [newEmployee, setNewEmployee] = useState({
+    fullName: "",
+    gender: "Male",
+    dateOfBirth: "",
+    role: "",
+    branchId: "",
     baseSalary: 0
   })
 
@@ -47,14 +65,15 @@ export default function EmployeesPage() {
         role: selectedPosition === "all" ? undefined : selectedPosition,
         branchId: selectedBranch === "all" ? undefined : selectedBranch,
         page: pagination.page,
-        pageSize: pagination.pageSize
+        pageSize: pagination.pageSize,
+        search: searchTerm // <--- UPDATED: Pass search term to API
       }
       const res = await getEmployees(params)
       if (res.success) {
         setEmployeeData(res.data)
         setPagination(prev => ({ ...prev, totalPages: res.pagination.totalPages }))
         
-        // Update selected employee data if detail modal is open
+        // Update detail modal data if open
         if (selectedEmployee) {
           const updated = res.data.find(e => e.EmployeeID === selectedEmployee.EmployeeID)
           if (updated) setSelectedEmployee(updated)
@@ -67,6 +86,7 @@ export default function EmployeesPage() {
     }
   }
 
+  // Load Metadata (Branches/Roles) on mount
   useEffect(() => {
     const fetchMetadata = async () => {
       const [br, ro] = await Promise.all([getBranches(), getEmployeeRoles()])
@@ -76,20 +96,37 @@ export default function EmployeesPage() {
     fetchMetadata()
   }, [])
 
-  // Trigger fetch when filters or page changes
+  // --- FILTER EFFECT ---
+  // Re-fetch when Branch, Role, or Page changes
   useEffect(() => { 
     fetchEmployees() 
   }, [selectedBranch, selectedPosition, pagination.page])
 
+  // --- SEARCH DEBOUNCE EFFECT (NEW) ---
+  // Wait 500ms after user stops typing before fetching
+  useEffect(() => {
+    const delayDebounceFn = setTimeout(() => {
+      // If we are already on page 1, fetch immediately
+      // If not, reset to page 1 (which triggers the Filter Effect above to fetch)
+      if (pagination.page === 1) {
+        fetchEmployees()
+      } else {
+        setPagination(prev => ({ ...prev, page: 1 }))
+      }
+    }, 500)
+
+    return () => clearTimeout(delayDebounceFn)
+  }, [searchTerm])
+
   // --- HANDLERS FOR FILTERS ---
   const handleBranchChange = (e) => {
     setSelectedBranch(e.target.value)
-    setPagination(prev => ({ ...prev, page: 1 })) // Reset to page 1
+    setPagination(prev => ({ ...prev, page: 1 }))
   }
 
   const handleRoleChange = (e) => {
     setSelectedPosition(e.target.value)
-    setPagination(prev => ({ ...prev, page: 1 })) // Reset to page 1
+    setPagination(prev => ({ ...prev, page: 1 }))
   }
 
   // --- UPDATE LOGIC ---
@@ -121,26 +158,62 @@ export default function EmployeesPage() {
     } finally { setSubmitting(false) }
   }
 
-  // --- RESIGN LOGIC (NEW) ---
+  // --- ADD EMPLOYEE LOGIC ---
+  const handleAddSubmit = async (e) => {
+    e.preventDefault()
+
+    if (!newEmployee.fullName || !newEmployee.branchId || !newEmployee.role) {
+      alert("Vui lòng điền đầy đủ: Tên, Chi nhánh, Chức vụ")
+      return
+    }
+
+    setSubmitting(true)
+    try {
+      const res = await addEmployee({
+        ...newEmployee,
+        baseSalary: Number(newEmployee.baseSalary)
+      })
+
+      if (res.success) {
+        alert("Thêm nhân viên mới thành công!")
+        setIsAddOpen(false)
+        fetchEmployees()
+        // Reset form
+        setNewEmployee({
+          fullName: "",
+          gender: "Male",
+          dateOfBirth: "",
+          role: "",
+          branchId: "",
+          baseSalary: 0
+        })
+      }
+    } catch (error) {
+      console.error(error)
+      alert(error.response?.data?.message || "Có lỗi xảy ra khi thêm nhân viên.")
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  // --- RESIGN LOGIC ---
   const handleResign = async () => {
     const confirm = window.confirm(
-      `CẢNH BÁO: Bạn có chắc chắn muốn cho nhân viên "${selectedEmployee.FullName}" thôi việc?\n\nHành động này sẽ cập nhật trạng thái nhân viên và không thể hoàn tác ngay lập tức.`
+      `CẢNH BÁO: Bạn có chắc chắn muốn cho nhân viên "${selectedEmployee.FullName}" thôi việc?`
     )
-    
     if (!confirm) return
 
     setIsResigning(true)
     try {
       const res = await resignEmployee(selectedEmployee.EmployeeID)
-      // Assuming res.success or similar structure based on previous patterns
       if (res) {
         alert("Đã cập nhật trạng thái thôi việc thành công.")
         setIsDetailOpen(false)
-        fetchEmployees() // Refresh list to remove or update status
+        fetchEmployees()
       }
     } catch (error) {
       console.error("Resign error:", error)
-      alert(error.response?.data?.message || "Có lỗi xảy ra khi thực hiện thao tác.")
+      alert(error.response?.data?.message || "Có lỗi xảy ra.")
     } finally {
       setIsResigning(false)
     }
@@ -156,10 +229,9 @@ export default function EmployeesPage() {
     } catch (e) { alert("Lỗi điều chuyển") } finally { setIsMoving(false) }
   }
 
-  // Client-side search filter (applies on top of server-side filters)
-  const displayEmployees = employeeData.filter(emp =>
-    emp.FullName.toLowerCase().includes(searchTerm.toLowerCase()) || emp.EmployeeID.toString().includes(searchTerm)
-  )
+  // --- DISPLAY DATA ---
+  // UPDATED: No longer filtering on client side. Using raw data from API.
+  const displayEmployees = employeeData;
 
   return (
     <div className="min-h-screen bg-white text-black p-6 space-y-6">
@@ -176,7 +248,7 @@ export default function EmployeesPage() {
 
       {/* --- FILTER BAR --- */}
       <div className="grid grid-cols-1 md:grid-cols-12 gap-4 bg-gray-50 p-4 rounded-xl border border-gray-100">
-        {/* Search Input */}
+        {/* Search */}
         <div className="md:col-span-4 relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
           <input 
@@ -224,7 +296,7 @@ export default function EmployeesPage() {
           </div>
         </div>
 
-        {/* Results Count */}
+        {/* Count */}
         <div className="md:col-span-2 flex items-center justify-end text-sm text-gray-500 font-medium">
            {isLoading ? "Đang tải..." : `${displayEmployees.length} Nhân viên`}
         </div>
@@ -392,11 +464,11 @@ export default function EmployeesPage() {
                   </div>
                   
                   <div className="flex gap-3 md:col-span-2">
-                     <MapPin className="h-5 w-5 text-gray-400 mt-1" />
-                     <div className="flex-1 space-y-1">
-                       <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Chi nhánh hiện tại</p>
-                       <p className="font-semibold text-gray-900">{selectedEmployee.BranchName}</p>
-                     </div>
+                      <MapPin className="h-5 w-5 text-gray-400 mt-1" />
+                      <div className="flex-1 space-y-1">
+                        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Chi nhánh hiện tại</p>
+                        <p className="font-semibold text-gray-900">{selectedEmployee.BranchName}</p>
+                      </div>
                   </div>
                 </div>
               ) : (
@@ -473,6 +545,134 @@ export default function EmployeesPage() {
                 )}
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* --- MODAL THÊM NHÂN VIÊN --- */}
+      {isAddOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto shadow-2xl flex flex-col animate-in fade-in zoom-in duration-200">
+            
+            {/* Header */}
+            <div className="p-6 border-b flex justify-between items-center bg-gray-50">
+              <div>
+                <h2 className="text-xl font-bold text-gray-900">Thêm nhân viên mới</h2>
+                <p className="text-sm text-gray-500">Tạo tài khoản và thông tin nhân sự.</p>
+              </div>
+              <button onClick={() => setIsAddOpen(false)} className="p-2 hover:bg-gray-200 rounded-full transition-colors">
+                <X className="h-5 w-5 text-gray-500" />
+              </button>
+            </div>
+
+            {/* Form Body */}
+            <form onSubmit={handleAddSubmit} className="p-8 space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                
+                {/* Full Name */}
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-gray-500 uppercase">Họ và tên <span className="text-red-500">*</span></label>
+                  <input 
+                    required
+                    type="text" 
+                    placeholder="Nguyễn Văn A"
+                    className="w-full border-b border-gray-300 py-2 text-sm outline-none focus:border-black transition-colors"
+                    value={newEmployee.fullName}
+                    onChange={(e) => setNewEmployee({...newEmployee, fullName: e.target.value})}
+                  />
+                </div>
+
+                {/* Gender */}
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-gray-500 uppercase">Giới tính</label>
+                  <select 
+                    className="w-full border-b border-gray-300 py-2 text-sm outline-none focus:border-black bg-transparent"
+                    value={newEmployee.gender}
+                    onChange={(e) => setNewEmployee({...newEmployee, gender: e.target.value})}
+                  >
+                    <option value="Male">Nam</option>
+                    <option value="Female">Nữ</option>
+                    <option value="Other">Khác</option>
+                  </select>
+                </div>
+
+                {/* Date of Birth */}
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-gray-500 uppercase">Ngày sinh</label>
+                  <input 
+                    type="date" 
+                    className="w-full border-b border-gray-300 py-2 text-sm outline-none focus:border-black transition-colors"
+                    value={newEmployee.dateOfBirth}
+                    onChange={(e) => setNewEmployee({...newEmployee, dateOfBirth: e.target.value})}
+                  />
+                </div>
+
+                {/* Role */}
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-gray-500 uppercase">Chức vụ <span className="text-red-500">*</span></label>
+                  <select 
+                    required
+                    className="w-full border-b border-gray-300 py-2 text-sm outline-none focus:border-black bg-transparent"
+                    value={newEmployee.role}
+                    onChange={(e) => setNewEmployee({...newEmployee, role: e.target.value})}
+                  >
+                    <option value="">-- Chọn chức vụ --</option>
+                    {roles.map((r, idx) => (
+                      <option key={idx} value={r}>{r}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Branch */}
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-gray-500 uppercase">Chi nhánh làm việc <span className="text-red-500">*</span></label>
+                  <select 
+                    required
+                    className="w-full border-b border-gray-300 py-2 text-sm outline-none focus:border-black bg-transparent"
+                    value={newEmployee.branchId}
+                    onChange={(e) => setNewEmployee({...newEmployee, branchId: e.target.value})}
+                  >
+                    <option value="">-- Chọn chi nhánh --</option>
+                    {branches.map((b) => (
+                      <option key={b.BranchID} value={b.BranchID}>{b.BranchName}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Salary */}
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-gray-500 uppercase">Lương cơ bản (VNĐ)</label>
+                  <input 
+                    type="number" 
+                    min="0"
+                    placeholder="0"
+                    className="w-full border-b border-gray-300 py-2 text-sm outline-none focus:border-black transition-colors"
+                    value={newEmployee.baseSalary}
+                    onChange={(e) => setNewEmployee({...newEmployee, baseSalary: e.target.value})}
+                  />
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex justify-end gap-3 pt-4 border-t border-gray-100">
+                <button 
+                  type="button"
+                  onClick={() => setIsAddOpen(false)} 
+                  className="px-6 py-2.5 bg-white border border-gray-300 text-gray-700 rounded-lg font-medium hover:bg-gray-50 transition-all text-sm"
+                >
+                  Hủy bỏ
+                </button>
+                <button 
+                  type="submit" 
+                  disabled={submitting}
+                  className="px-6 py-2.5 bg-black text-white rounded-lg font-medium shadow-lg shadow-black/20 hover:bg-gray-800 transition-all flex items-center gap-2 text-sm"
+                >
+                  {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+                  Tạo nhân viên
+                </button>
+              </div>
+            </form>
+
           </div>
         </div>
       )}
