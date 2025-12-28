@@ -132,7 +132,7 @@ const PetsPage = () => {
           <Heart className="h-8 w-8 text-red-500" />
           Thú cưng của tôi
         </h1>
-        <button className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg flex items-center gap-2" onClick={() => setShowAddModal(true)}>
+        <button className="inline-flex items-center px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors" onClick={() => setShowAddModal(true)}>
           <Plus className="h-5 w-5" />
           Thêm thú cưng
         </button>
@@ -210,7 +210,8 @@ const PetsPage = () => {
 
       {/* Add Pet Modal */}
       {showAddModal && (
-        <div className="fixed inset-0 bg-gray-900 bg-opacity-50 flex items-center justify-center z-50">
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
+
           <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4 max-h-[90vh] overflow-y-auto">
             <div className="p-6">
               <div className="flex justify-between items-center mb-4">
@@ -332,14 +333,14 @@ const PetsPage = () => {
                   <button
                     type="button"
                     onClick={() => setShowAddModal(false)}
-                    className="flex-1 bg-gray-500 hover:bg-gray-600 text-white py-2 px-4 rounded-md"
+                    className="flex-1 bg-red-500 hover:bg-red-600 text-white py-2 px-4 rounded-md"
                   >
                     Hủy
                   </button>
                   <button
                     type="submit"
                     disabled={addLoading}
-                    className="flex-1 bg-green-600 hover:bg-green-700 text-white py-2 px-4 rounded-md disabled:opacity-50"
+                    className="inline-flex items-center px-10 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors"
                   >
                     {addLoading ? "Đang thêm..." : "Thêm thú cưng"}
                   </button>

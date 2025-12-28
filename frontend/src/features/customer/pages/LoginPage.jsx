@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
-import { Heart, LogIn } from "lucide-react";
+import { LogIn } from "lucide-react";
 import { useAuth } from "../../../contexts/AuthContext";
 import userApi from "../../../api/userApi";
 
@@ -37,10 +37,10 @@ const LoginPage = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen bg-gradient-to-br from-teal-50 to-cyan-100 flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-md w-full space-y-8">
         <div className="text-center">
-          <Heart className="mx-auto h-12 w-12 text-red-500" />
+          <div className="text-6xl mb-4">🐾</div>
           <h2 className="mt-6 text-3xl font-extrabold text-gray-900">
             Đăng nhập
           </h2>
@@ -66,7 +66,7 @@ const LoginPage = () => {
                 name="phone"
                 type="tel"
                 required
-                className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-t-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm"
+                className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-t-md focus:outline-none focus:ring-teal-500 focus:border-teal-500 focus:z-10 sm:text-sm"
                 placeholder="Số điện thoại"
                 value={phone}
                 onChange={(e) => setPhone(e.target.value)}
@@ -81,7 +81,7 @@ const LoginPage = () => {
                 name="password"
                 type="password"
                 required
-                className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-b-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm"
+                className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-b-md focus:outline-none focus:ring-teal-500 focus:border-teal-500 focus:z-10 sm:text-sm"
                 placeholder="Mật khẩu"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
@@ -93,10 +93,10 @@ const LoginPage = () => {
             <button
               type="submit"
               disabled={loading}
-              className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-teal-600 hover:bg-teal-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <span className="absolute left-0 inset-y-0 flex items-center pl-3">
-                <LogIn className="h-5 w-5 text-indigo-500 group-hover:text-indigo-400" />
+                <LogIn className="h-5 w-5 text-teal-500 group-hover:text-teal-400" />
               </span>
               {loading ? "Đang đăng nhập..." : "Đăng nhập"}
             </button>
@@ -105,7 +105,7 @@ const LoginPage = () => {
           <div className="text-center">
             <p className="text-sm text-gray-600">
               Chưa có tài khoản?{" "}
-              <Link to="/register" className="font-medium text-indigo-600 hover:text-indigo-500">
+              <Link to="/register" className="font-medium text-teal-600 hover:text-teal-500">
                 Đăng ký ngay
               </Link>
             </p>

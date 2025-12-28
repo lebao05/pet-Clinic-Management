@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { Calendar, Clock, MapPin, User, Heart } from "lucide-react";
+import { Link } from "react-router-dom";
 import userApi from "../../../api/userApi";
 import { useAuth } from "../../../contexts/AuthContext";
 
@@ -103,6 +104,15 @@ const AppointmentsPage = () => {
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-gray-900 mb-2">Cuộc hẹn của tôi</h1>
         <p className="text-gray-600">Quản lý các cuộc hẹn đã đặt</p>
+        <div className="mt-4">
+          <Link
+            to="/customer/booking"
+            className="inline-flex items-center px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors"
+          >
+            <Calendar className="h-4 w-4 mr-2" />
+            Đặt lịch hẹn mới
+          </Link>
+        </div>
       </div>
 
       {appointments.length === 0 ? (
