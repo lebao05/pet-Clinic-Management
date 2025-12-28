@@ -8,54 +8,65 @@ const sql = require("mssql");
 // ============================================
 
 // 📊 Dashboard Summary
+// backend/src/controllers/branchManagerController.js
+
+// 📊 Dashboard Summary - VERSION TỐI ƯU
 exports.getDashboardSummary = async (req, res) => {
   try {
     const { branchId, date } = req.query;
     const targetDate = date || new Date().toISOString().split("T")[0];
+
     const pool = await db.getConnection();
 
-    const result = await pool.request().input("branchId", sql.Int, branchId).input("targetDate", sql.Date, targetDate)
-      .query(`
-        SELECT 
-          -- Doanh thu hôm nay
-          ISNULL(SUM(CASE 
-            WHEN CAST(i.InvoiceDate AS DATE) = @targetDate 
-              AND i.PaymentStatus = 'Paid' 
-            THEN i.FinalAmount 
-            ELSE 0 
-          END), 0) AS todayRevenue,
+    // ✅ TÁCH THÀNH 4 QUERIES ĐƠN GIẢN, CHẠY SONG SONG
+    const [todayRevenue, monthRevenue, monthCustomers, todayAppointments] = await Promise.all([
+      // Query 1: Doanh thu hôm nay (đơn giản nhất)
+      pool.request().input("branchId", sql.Int, branchId).input("targetDate", sql.Date, targetDate).query(`
+          SELECT ISNULL(SUM(FinalAmount), 0) AS todayRevenue
+          FROM Invoice WITH (NOLOCK)
+          WHERE BranchID = @branchId
+            AND CAST(InvoiceDate AS DATE) = @targetDate
+            AND PaymentStatus = 'Paid'
+        `),
 
-          -- Tổng doanh thu tháng này
-          ISNULL(SUM(CASE 
-            WHEN YEAR(i.InvoiceDate) = YEAR(@targetDate) 
-              AND MONTH(i.InvoiceDate) = MONTH(@targetDate)
-              AND i.PaymentStatus = 'Paid'
-            THEN i.FinalAmount 
-            ELSE 0 
-          END), 0) AS monthRevenue,
+      // Query 2: Doanh thu tháng này
+      pool.request().input("branchId", sql.Int, branchId).input("targetDate", sql.Date, targetDate).query(`
+          SELECT ISNULL(SUM(FinalAmount), 0) AS monthRevenue
+          FROM Invoice WITH (NOLOCK)
+          WHERE BranchID = @branchId
+            AND YEAR(InvoiceDate) = YEAR(@targetDate)
+            AND MONTH(InvoiceDate) = MONTH(@targetDate)
+            AND PaymentStatus = 'Paid'
+        `),
 
-          -- Số lịch hẹn hôm nay
-          COUNT(DISTINCT CASE 
-            WHEN CAST(a.ScheduleTime AS DATE) = @targetDate 
-            THEN a.AppointmentID 
-          END) AS todayAppointments,
+      // Query 3: Số khách hàng unique tháng này
+      pool.request().input("branchId", sql.Int, branchId).input("targetDate", sql.Date, targetDate).query(`
+          SELECT COUNT(DISTINCT UserID) AS monthCustomers
+          FROM Invoice WITH (NOLOCK)
+          WHERE BranchID = @branchId
+            AND YEAR(InvoiceDate) = YEAR(@targetDate)
+            AND MONTH(InvoiceDate) = MONTH(@targetDate)
+            AND PaymentStatus = 'Paid'
+        `),
 
-          -- Số khách hàng unique tháng này
-          COUNT(DISTINCT CASE 
-            WHEN YEAR(i.InvoiceDate) = YEAR(@targetDate) 
-              AND MONTH(i.InvoiceDate) = MONTH(@targetDate)
-            THEN i.UserID 
-          END) AS monthCustomers
+      // Query 4: Số lịch hẹn hôm nay
+      pool.request().input("branchId", sql.Int, branchId).input("targetDate", sql.Date, targetDate).query(`
+          SELECT COUNT(AppointmentID) AS todayAppointments
+          FROM Appointment WITH (NOLOCK)
+          WHERE BranchID = @branchId
+            AND CAST(ScheduleTime AS DATE) = @targetDate
+        `),
+    ]);
 
-        FROM Invoice i WITH (NOLOCK)
-        LEFT JOIN Appointment a WITH (NOLOCK) 
-          ON i.BranchID = a.BranchID
-        WHERE i.BranchID = @branchId
-      `);
-
+    // Kết hợp kết quả
     res.status(200).json({
       success: true,
-      data: result.recordset[0],
+      data: {
+        todayRevenue: todayRevenue.recordset[0].todayRevenue || 0,
+        monthRevenue: monthRevenue.recordset[0].monthRevenue || 0,
+        monthCustomers: monthCustomers.recordset[0].monthCustomers || 0,
+        todayAppointments: todayAppointments.recordset[0].todayAppointments || 0,
+      },
     });
   } catch (error) {
     console.error("Error in getDashboardSummary:", error);
@@ -70,14 +81,14 @@ exports.getDashboardSummary = async (req, res) => {
 exports.getRevenueChart = async (req, res) => {
   try {
     const { branchId, fromDate, toDate } = req.query;
-    const pool = await db.getConnection();
 
+    const pool = await db.getConnection();
     const result = await pool
       .request()
       .input("branchId", sql.Int, branchId)
       .input("fromDate", sql.Date, fromDate)
       .input("toDate", sql.Date, toDate).query(`
-        SELECT 
+        SELECT
           CAST(InvoiceDate AS DATE) AS date,
           SUM(FinalAmount) AS revenue,
           COUNT(DISTINCT InvoiceID) AS invoiceCount
@@ -112,36 +123,36 @@ exports.getUrgentAlerts = async (req, res) => {
     const [lowStock, appointments] = await Promise.all([
       // Alert 1: Sản phẩm sắp hết
       pool.request().input("branchId", sql.Int, branchId).query(`
-        SELECT TOP 3
-          'warning' AS severity,
-          'Sản phẩm sắp hết' AS title,
-          CONCAT(p.ProductName, ' chỉ còn ', inv.StockQty, ' ', p.Unit) AS message
-        FROM Inventory inv WITH (NOLOCK)
-        JOIN Product p WITH (NOLOCK) ON inv.ProductID = p.ProductID
-        WHERE inv.BranchID = @branchId
-          AND inv.StockQty > 0
-          AND inv.StockQty <= 10
-          AND inv.IsActive = 1
-        ORDER BY inv.StockQty ASC
-      `),
+          SELECT TOP 3
+            'warning' AS severity,
+            'Sản phẩm sắp hết' AS title,
+            CONCAT(p.ProductName, ' chỉ còn ', inv.StockQty, ' ', p.Unit) AS message
+          FROM Inventory inv WITH (NOLOCK)
+          JOIN Product p WITH (NOLOCK) ON inv.ProductID = p.ProductID
+          WHERE inv.BranchID = @branchId
+            AND inv.StockQty > 0
+            AND inv.StockQty <= 10
+            AND inv.IsActive = 1
+          ORDER BY inv.StockQty ASC
+        `),
 
       // Alert 2: Lịch hẹn hôm nay
       pool.request().input("branchId", sql.Int, branchId).query(`
-        SELECT TOP 3
-          'info' AS severity,
-          'Lịch hẹn hôm nay' AS title,
-          CONCAT(
-            FORMAT(a.ScheduleTime, 'HH:mm'), ' - ',
-            u.FullName, ' - ', p.PetName
-          ) AS message
-        FROM Appointment a WITH (NOLOCK)
-        JOIN Users u WITH (NOLOCK) ON a.UserID = u.UserID
-        JOIN Pet p WITH (NOLOCK) ON a.PetID = p.PetID
-        WHERE a.BranchID = @branchId
-          AND CAST(a.ScheduleTime AS DATE) = CAST(GETDATE() AS DATE)
-          AND a.Status = 'Scheduled'
-        ORDER BY a.ScheduleTime ASC
-      `),
+          SELECT TOP 3
+            'info' AS severity,
+            'Lịch hẹn hôm nay' AS title,
+            CONCAT(
+              FORMAT(a.ScheduleTime, 'HH:mm'), ' - ',
+              u.FullName, ' - ', p.PetName
+            ) AS message
+          FROM Appointment a WITH (NOLOCK)
+          JOIN Users u WITH (NOLOCK) ON a.UserID = u.UserID
+          JOIN Pet p WITH (NOLOCK) ON a.PetID = p.PetID
+          WHERE a.BranchID = @branchId
+            AND CAST(a.ScheduleTime AS DATE) = CAST(GETDATE() AS DATE)
+            AND a.Status = 'Scheduled'
+          ORDER BY a.ScheduleTime ASC
+        `),
     ]);
 
     const alerts = [...(lowStock.recordset || []), ...(appointments.recordset || [])];
@@ -175,7 +186,7 @@ exports.getRevenueByPeriod = async (req, res) => {
     else groupBy = "YEAR(InvoiceDate)";
 
     const result = await pool.request().input("branchId", sql.Int, branchId).input("year", sql.Int, year).query(`
-        SELECT 
+        SELECT
           ${groupBy} AS period,
           SUM(FinalAmount) AS totalRevenue,
           COUNT(DISTINCT InvoiceID) AS invoiceCount,
@@ -212,7 +223,7 @@ exports.getRevenueByDoctor = async (req, res) => {
       .input("branchId", sql.Int, branchId)
       .input("fromDate", sql.Date, fromDate)
       .input("toDate", sql.Date, toDate).query(`
-        SELECT 
+        SELECT
           e.EmployeeID,
           e.FullName AS doctorName,
           COUNT(DISTINCT a.AppointmentID) AS appointmentCount,
@@ -220,7 +231,7 @@ exports.getRevenueByDoctor = async (req, res) => {
         FROM Employee e WITH (NOLOCK)
         JOIN Appointment a WITH (NOLOCK) ON e.EmployeeID = a.DoctorID
         JOIN Invoice i WITH (NOLOCK) ON a.BranchID = i.BranchID
-        LEFT JOIN ServiceInvoiceLine sil WITH (NOLOCK) 
+        LEFT JOIN ServiceInvoiceLine sil WITH (NOLOCK)
           ON i.InvoiceID = sil.InvoiceID AND a.AppointmentID = sil.AppointmentID
         WHERE a.BranchID = @branchId
           AND a.ScheduleTime BETWEEN @fromDate AND @toDate
@@ -254,7 +265,7 @@ exports.getProductSales = async (req, res) => {
       .input("branchId", sql.Int, branchId)
       .input("fromDate", sql.Date, fromDate)
       .input("toDate", sql.Date, toDate).query(`
-        SELECT 
+        SELECT
           p.ProductID,
           p.ProductName,
           p.ProductType,
@@ -276,7 +287,7 @@ exports.getProductSales = async (req, res) => {
       .input("branchId", sql.Int, branchId)
       .input("fromDate", sql.Date, fromDate)
       .input("toDate", sql.Date, toDate).query(`
-        SELECT 
+        SELECT
           SUM(pil.LineAmount) AS totalProductRevenue,
           COUNT(DISTINCT i.InvoiceID) AS totalOrders
         FROM ProductInvoiceLine pil WITH (NOLOCK)
@@ -315,7 +326,7 @@ exports.getVaccinatedPets = async (req, res) => {
       .input("branchId", sql.Int, branchId)
       .input("fromDate", sql.Date, fromDate)
       .input("toDate", sql.Date, toDate).query(`
-        SELECT 
+        SELECT
           p.PetID,
           p.PetName,
           p.Species,
@@ -389,22 +400,28 @@ exports.getTopVaccines = async (req, res) => {
   }
 };
 
-// 🔍 Tra cứu vaccine
+// 🔍 Tra cứu vaccine - CẬP NHẬT FULL-TEXT SEARCH
 exports.searchVaccines = async (req, res) => {
   try {
     const { branchId, searchTerm, manufacturer } = req.query;
     const pool = await db.getConnection();
 
     let whereClause = "v.IsActive = 1";
-    if (searchTerm) {
-      whereClause += ` AND v.VaccineName LIKE N'%${searchTerm}%'`;
+
+    // ✅ SỬ DỤNG CONTAINS thay vì LIKE
+    if (searchTerm && searchTerm.trim() !== "") {
+      // Escape single quotes và thêm wildcard
+      const sanitized = searchTerm.replace(/'/g, "''");
+      whereClause += ` AND CONTAINS(v.VaccineName, N'"${sanitized}*"')`;
     }
-    if (manufacturer) {
-      whereClause += ` AND v.Manufacturer = N'${manufacturer}'`;
+
+    if (manufacturer && manufacturer.trim() !== "") {
+      const sanitized = manufacturer.replace(/'/g, "''");
+      whereClause += ` AND v.Manufacturer = N'${sanitized}'`;
     }
 
     const result = await pool.request().query(`
-      SELECT 
+      SELECT
         v.VaccineID,
         v.VaccineName,
         v.Manufacturer,
@@ -443,7 +460,7 @@ exports.getInventory = async (req, res) => {
     const pool = await db.getConnection();
 
     const result = await pool.request().input("branchId", sql.Int, branchId).query(`
-        SELECT 
+        SELECT
           inv.BranchID,
           inv.ProductID,
           p.ProductName,
@@ -452,7 +469,7 @@ exports.getInventory = async (req, res) => {
           inv.StockQty,
           inv.SellingPrice,
           inv.IsActive,
-          CASE 
+          CASE
             WHEN inv.StockQty = 0 THEN 'out_of_stock'
             WHEN inv.StockQty <= 10 THEN 'low_stock'
             ELSE 'in_stock'
@@ -517,9 +534,11 @@ exports.getAppointments = async (req, res) => {
     const pool = await db.getConnection();
 
     let whereClause = "a.BranchID = @branchId";
+
     if (fromDate && toDate) {
       whereClause += " AND a.ScheduleTime BETWEEN @fromDate AND @toDate";
     }
+
     if (status) {
       whereClause += ` AND a.Status = '${status}'`;
     }
@@ -529,7 +548,7 @@ exports.getAppointments = async (req, res) => {
       .input("branchId", sql.Int, branchId)
       .input("fromDate", sql.DateTime, fromDate)
       .input("toDate", sql.DateTime, toDate).query(`
-        SELECT 
+        SELECT
           a.AppointmentID,
           a.ScheduleTime,
           a.Status,
@@ -572,7 +591,7 @@ exports.getExamStatistics = async (req, res) => {
       .input("branchId", sql.Int, branchId)
       .input("fromDate", sql.Date, fromDate)
       .input("toDate", sql.Date, toDate).query(`
-        SELECT 
+        SELECT
           COUNT(*) AS totalAppointments,
           SUM(CASE WHEN Status = 'Completed' THEN 1 ELSE 0 END) AS completedAppointments,
           SUM(CASE WHEN Status = 'Cancelled' THEN 1 ELSE 0 END) AS cancelledAppointments,
@@ -600,14 +619,36 @@ exports.getExamStatistics = async (req, res) => {
 // 6. NHÂN VIÊN - STAFF MANAGEMENT
 // ============================================
 
-// 👥 Danh sách nhân viên chi nhánh
+// 👥 Danh sách nhân viên chi nhánh - CẬP NHẬT FULL-TEXT SEARCH
 exports.getBranchStaff = async (req, res) => {
   try {
-    const { branchId } = req.query;
+    const { branchId, search, role, page = 1, pageSize = 10 } = req.query;
     const pool = await db.getConnection();
 
-    const result = await pool.request().input("branchId", sql.Int, branchId).query(`
-        SELECT 
+    // Tính offset cho pagination
+    const offset = (page - 1) * pageSize;
+
+    let whereClause = "ea.BranchID = @branchId";
+    whereClause += " AND (ea.EndDate IS NULL OR ea.EndDate >= GETDATE())";
+    // whereClause += " AND e.WorkStatus = 'Active'";
+
+    // ✅ SỬ DỤNG CONTAINS thay vì LIKE
+    if (search && search.trim() !== "") {
+      const sanitized = search.replace(/'/g, "''");
+      whereClause += ` AND CONTAINS(e.FullName, N'"${sanitized}*"')`;
+    }
+
+    if (role && role.trim() !== "") {
+      const sanitized = role.replace(/'/g, "''");
+      whereClause += ` AND e.Role = N'${sanitized}'`;
+    }
+
+    const result = await pool
+      .request()
+      .input("branchId", sql.Int, branchId)
+      .input("offset", sql.Int, offset)
+      .input("pageSize", sql.Int, pageSize).query(`
+        SELECT
           e.EmployeeID,
           e.FullName,
           e.DateOfBirth,
@@ -620,10 +661,10 @@ exports.getBranchStaff = async (req, res) => {
           ea.EndDate
         FROM Employee e WITH (NOLOCK)
         JOIN EmployeeAssignment ea WITH (NOLOCK) ON e.EmployeeID = ea.EmployeeID
-        WHERE ea.BranchID = @branchId
-          AND (ea.EndDate IS NULL OR ea.EndDate >= GETDATE())
-          AND e.WorkStatus = 'Active'
+        WHERE ${whereClause}
         ORDER BY e.Role, e.FullName ASC
+        OFFSET @offset ROWS
+        FETCH NEXT @pageSize ROWS ONLY
       `);
 
     res.status(200).json({
@@ -650,7 +691,7 @@ exports.getStaffPerformance = async (req, res) => {
       .input("branchId", sql.Int, branchId)
       .input("fromDate", sql.Date, fromDate)
       .input("toDate", sql.Date, toDate).query(`
-        SELECT 
+        SELECT
           e.EmployeeID,
           e.FullName,
           e.Role,
@@ -660,11 +701,11 @@ exports.getStaffPerformance = async (req, res) => {
           COUNT(DISTINCT r.RatingID) AS ratingCount
         FROM Employee e WITH (NOLOCK)
         JOIN EmployeeAssignment ea WITH (NOLOCK) ON e.EmployeeID = ea.EmployeeID
-        LEFT JOIN Invoice i WITH (NOLOCK) 
-          ON e.EmployeeID = i.StaffID 
+        LEFT JOIN Invoice i WITH (NOLOCK)
+          ON e.EmployeeID = i.StaffID
           AND i.InvoiceDate BETWEEN @fromDate AND @toDate
           AND i.PaymentStatus = 'Paid'
-        LEFT JOIN Rating r WITH (NOLOCK) 
+        LEFT JOIN Rating r WITH (NOLOCK)
           ON e.EmployeeID = r.EmployeeID
           AND r.RatingDate BETWEEN @fromDate AND @toDate
         WHERE ea.BranchID = @branchId
@@ -702,7 +743,7 @@ exports.getCustomerStatistics = async (req, res) => {
       .input("branchId", sql.Int, branchId)
       .input("days", sql.Int, days || 90).query(`
         WITH CustomerActivity AS (
-          SELECT 
+          SELECT
             u.UserID,
             u.FullName,
             u.Phone,
@@ -715,7 +756,7 @@ exports.getCustomerStatistics = async (req, res) => {
             AND i.PaymentStatus = 'Paid'
           GROUP BY u.UserID, u.FullName, u.Phone
         )
-        SELECT 
+        SELECT
           COUNT(*) AS totalCustomers,
           SUM(CASE WHEN DATEDIFF(DAY, lastVisit, GETDATE()) <= @days THEN 1 ELSE 0 END) AS activeCustomers,
           SUM(CASE WHEN DATEDIFF(DAY, lastVisit, GETDATE()) > @days THEN 1 ELSE 0 END) AS inactiveCustomers,
@@ -771,7 +812,7 @@ exports.getRatings = async (req, res) => {
       .input("branchId", sql.Int, branchId)
       .input("fromDate", sql.Date, fromDate)
       .input("toDate", sql.Date, toDate).query(`
-        SELECT 
+        SELECT
           r.RatingID,
           r.ServiceScore,
           r.AttitudeScore,
@@ -793,7 +834,7 @@ exports.getRatings = async (req, res) => {
       .input("branchId", sql.Int, branchId)
       .input("fromDate", sql.Date, fromDate)
       .input("toDate", sql.Date, toDate).query(`
-        SELECT 
+        SELECT
           AVG(CAST(OverallScore AS FLOAT)) AS avgOverall,
           AVG(CAST(ServiceScore AS FLOAT)) AS avgService,
           AVG(CAST(AttitudeScore AS FLOAT)) AS avgAttitude,
@@ -821,34 +862,53 @@ exports.getRatings = async (req, res) => {
 // 9. HỒ SƠ BỆNH ÁN - MEDICAL HISTORY
 // ============================================
 
-// 🔍 Tìm kiếm thú cưng
+// 🔍 Tìm kiếm thú cưng - CẬP NHẬT FULL-TEXT SEARCH
 exports.searchPets = async (req, res) => {
   try {
     const { branchId, searchTerm } = req.query;
     const pool = await db.getConnection();
 
-    const result = await pool.request().query(`
-      SELECT DISTINCT TOP 20
-        p.PetID,
-        p.PetName,
-        p.Species,
-        p.Breed,
-        p.BirthDate,
-        p.Gender,
-        u.FullName AS ownerName,
-        u.Phone AS ownerPhone
-      FROM Pet p WITH (NOLOCK)
-      JOIN Users u WITH (NOLOCK) ON p.UserID = u.UserID
-      JOIN Appointment a WITH (NOLOCK) ON p.PetID = a.PetID
-      WHERE a.BranchID = ${branchId}
-        AND p.IsActive = 1
-        AND (
-          p.PetName LIKE N'%${searchTerm}%'
-          OR u.FullName LIKE N'%${searchTerm}%'
-          OR u.Phone LIKE '%${searchTerm}%'
-        )
-      ORDER BY p.PetName ASC
-    `);
+    // Kiểm tra xem searchTerm có phải là số (tìm theo phone) không
+    const isPhoneSearch = /^\d+$/.test(searchTerm);
+
+    let searchCondition = "";
+    if (searchTerm && searchTerm.trim() !== "") {
+      const sanitized = searchTerm.replace(/'/g, "''");
+
+      if (isPhoneSearch) {
+        // Nếu là số, search phone bằng LIKE
+        searchCondition = `AND (
+          CONTAINS(p.PetName, N'"${sanitized}*"')
+          OR CONTAINS(u.FullName, N'"${sanitized}*"')
+          OR u.Phone LIKE '%${sanitized}%'
+        )`;
+      } else {
+        // Nếu không phải số, chỉ search tên
+        searchCondition = `AND (
+          CONTAINS(p.PetName, N'"${sanitized}*"')
+          OR CONTAINS(u.FullName, N'"${sanitized}*"')
+        )`;
+      }
+    }
+
+    const result = await pool.request().input("branchId", sql.Int, branchId).query(`
+        SELECT DISTINCT TOP 20
+          p.PetID,
+          p.PetName,
+          p.Species,
+          p.Breed,
+          p.BirthDate,
+          p.Gender,
+          u.FullName AS ownerName,
+          u.Phone AS ownerPhone
+        FROM Pet p WITH (NOLOCK)
+        JOIN Users u WITH (NOLOCK) ON p.UserID = u.UserID
+        JOIN Appointment a WITH (NOLOCK) ON p.PetID = a.PetID
+        WHERE a.BranchID = @branchId
+          AND p.IsActive = 1
+          ${searchCondition}
+        ORDER BY p.PetName ASC
+      `);
 
     res.status(200).json({
       success: true,
@@ -872,7 +932,7 @@ exports.getPetMedicalHistory = async (req, res) => {
     // Appointments
     const appointments = await pool.request().input("petId", sql.Int, petId).input("branchId", sql.Int, branchId)
       .query(`
-        SELECT 
+        SELECT
           a.AppointmentID,
           a.ScheduleTime,
           a.Status,
@@ -893,7 +953,7 @@ exports.getPetMedicalHistory = async (req, res) => {
     // Vaccinations
     const vaccinations = await pool.request().input("petId", sql.Int, petId).input("branchId", sql.Int, branchId)
       .query(`
-        SELECT 
+        SELECT
           v.VaccineName,
           vr.DateGiven,
           vr.Dose,
