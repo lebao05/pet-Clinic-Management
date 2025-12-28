@@ -1,352 +1,170 @@
-import React, { useEffect, useState } from "react";
-import StatCard from "../components/StatCard";
-import UrgentAlertsTable from "../components/UrgentAlertsTable";
-import RevenueChart from "../components/RevenueChart";
-import { branchManagerApi } from "../../../api/branchManagerApi";
-import { DollarSign, Users, AlertTriangle, RefreshCw, Calendar, AlertCircle } from "lucide-react";
-import Button from "../../../shared/components/ui/Button";
-import { Card } from "../../../shared/components/ui/Card";
+// frontend/src/features/branchManager/pages/DashboardPage.jsx
 
-function getDefaultBranchId() {
-  const v = localStorage.getItem("branchId");
-  return v ? Number(v) : 1;
-}
-
-function dateISO(d) {
-  const x = new Date(d);
-  const yyyy = x.getFullYear();
-  const mm = String(x.getMonth() + 1).padStart(2, "0");
-  const dd = String(x.getDate()).padStart(2, "0");
-  return `${yyyy}-${mm}-${dd}`;
-}
+import React, { useState, useEffect } from "react";
+import branchManagerApi from "../../../api/branchManagerApi";
+import { DollarSign, TrendingUp, Calendar, Users, AlertCircle, ArrowUp, ArrowDown } from "lucide-react";
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 
 const DashboardPage = () => {
-  const [branchId, setBranchId] = useState(getDefaultBranchId());
-  const [stats, setStats] = useState({
-    todayRevenue: 0,
-    activeStaff: 0,
-    lowStockItems: 0,
-  });
-  const [urgentItems, setUrgentItems] = useState([]);
-  const [revenue7d, setRevenue7d] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
+  const branchId = 10;
+  const [loading, setLoading] = useState(true);
+  const [summary, setSummary] = useState(null);
+  const [revenueChart, setRevenueChart] = useState([]);
+  const [alerts, setAlerts] = useState([]);
 
-  // Time range for revenue chart
-  const [chartDateRange, setChartDateRange] = useState("7days");
-  const [customFrom, setCustomFrom] = useState(dateISO(new Date(Date.now() - 7 * 86400000)));
-  const [customTo, setCustomTo] = useState(dateISO(new Date()));
-  const [dateRangeError, setDateRangeError] = useState("");
+  useEffect(() => {
+    fetchDashboardData();
+  }, []);
 
-  // ==================== VALIDATE DATE RANGE (MAX 7 DAYS) ====================
-  const validateDateRange = (fromDate, toDate) => {
-    const from = new Date(fromDate);
-    const to = new Date(toDate);
-    const diffTime = Math.abs(to - from);
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-
-    if (diffDays > 7) {
-      setDateRangeError("Date range cannot exceed 7 days");
-      return false;
-    }
-
-    if (from > to) {
-      setDateRangeError("Start date must be before end date");
-      return false;
-    }
-
-    setDateRangeError("");
-    return true;
-  };
-
-  // ==================== LOAD SUMMARY ====================
-  async function loadSummary() {
+  const fetchDashboardData = async () => {
     try {
       setLoading(true);
-      setError("");
-      const res = await branchManagerApi.getSummary(branchId);
-      const data = res.data?.data;
+      const today = new Date().toISOString().split("T")[0];
+      const last30Days = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
 
-      setStats({
-        todayRevenue: Number(data?.todayRevenue || 0),
-        activeStaff: Number(data?.activeStaff || 0),
-        lowStockItems: Number(data?.lowStockItems || 0),
-      });
-      setUrgentItems((data?.lowStockList || []).slice(0, 5));
-    } catch (e) {
-      setError(e.response?.data?.message || e.message);
+      const [summaryRes, revenueRes, alertsRes] = await Promise.allSettled([
+        branchManagerApi.getDashboardSummary(branchId, today),
+        branchManagerApi.getRevenueChart(branchId, last30Days, today),
+        branchManagerApi.getUrgentAlerts(branchId),
+      ]);
+
+      if (summaryRes.status === "fulfilled") {
+        setSummary(summaryRes.value.data.data);
+      }
+
+      if (revenueRes.status === "fulfilled") {
+        const chartData = (revenueRes.value.data.data || []).map((item) => ({
+          ...item,
+          date: new Date(item.date).toLocaleDateString("vi-VN", {
+            month: "short",
+            day: "numeric",
+          }),
+        }));
+        setRevenueChart(chartData);
+      }
+
+      if (alertsRes.status === "fulfilled") {
+        setAlerts(alertsRes.value.data.alerts || []);
+      }
+    } catch (error) {
+      console.error("Error fetching dashboard:", error);
     } finally {
       setLoading(false);
     }
-  }
-
-  // ==================== LOAD REVENUE CHART ====================
-  async function loadRevenueChart() {
-    try {
-      let from, to;
-
-      if (chartDateRange === "custom") {
-        from = customFrom;
-        to = customTo;
-
-        // Validate before loading
-        if (!validateDateRange(from, to)) {
-          return;
-        }
-      } else if (chartDateRange === "7days") {
-        from = dateISO(new Date(Date.now() - 6 * 86400000)); // 7 days including today
-        to = dateISO(new Date());
-      } else if (chartDateRange === "14days") {
-        from = dateISO(new Date(Date.now() - 13 * 86400000));
-        to = dateISO(new Date());
-      } else if (chartDateRange === "30days") {
-        from = dateISO(new Date(Date.now() - 29 * 86400000));
-        to = dateISO(new Date());
-      }
-
-      const res = await branchManagerApi.revenueReport({ branchId, from, to });
-      setRevenue7d(res.data?.data?.daily || []);
-    } catch (e) {
-      console.error("Error loading chart:", e);
-      setRevenue7d([]);
-    }
-  }
-
-  useEffect(() => {
-    loadSummary();
-    loadRevenueChart();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  useEffect(() => {
-    if (chartDateRange !== "custom") {
-      loadRevenueChart();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [chartDateRange, branchId]);
-
-  function saveBranch() {
-    localStorage.setItem("branchId", String(branchId));
-    loadSummary();
-    loadRevenueChart();
-  }
-
-  function handleRefresh() {
-    loadSummary();
-    loadRevenueChart();
-  }
-
-  // ==================== AUTO SET TO DATE WHEN FROM CHANGES ====================
-  const handleCustomFromChange = (value) => {
-    setCustomFrom(value);
-
-    // Auto set To date = From date + 7 days
-    const fromDate = new Date(value);
-    const toDate = new Date(fromDate);
-    toDate.setDate(toDate.getDate() + 7);
-
-    // Don't exceed today
-    const today = new Date();
-    if (toDate > today) {
-      setCustomTo(dateISO(today));
-    } else {
-      setCustomTo(dateISO(toDate));
-    }
-
-    // Validate after setting
-    setTimeout(() => {
-      validateDateRange(value, customTo);
-    }, 100);
   };
 
-  const handleCustomToChange = (value) => {
-    setCustomTo(value);
-    validateDateRange(customFrom, value);
+  const formatCurrency = (value) => {
+    return new Intl.NumberFormat("vi-VN", {
+      style: "currency",
+      currency: "VND",
+      maximumFractionDigits: 0,
+    }).format(value || 0);
   };
 
-  // Load chart when custom dates change
-  useEffect(() => {
-    if (chartDateRange === "custom") {
-      loadRevenueChart();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [customFrom, customTo]);
+  const StatCard = ({ icon: Icon, label, value, change, color }) => (
+    <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
+      <div className="flex items-center justify-between mb-4">
+        <div className={`p-3 rounded-lg bg-${color}-50`}>
+          <Icon className={`w-6 h-6 text-${color}-600`} />
+        </div>
+        {change && (
+          <span
+            className={`flex items-center gap-1 text-sm font-medium ${change > 0 ? "text-green-600" : "text-red-600"}`}
+          >
+            {change > 0 ? <ArrowUp className="w-4 h-4" /> : <ArrowDown className="w-4 h-4" />}
+            {Math.abs(change)}%
+          </span>
+        )}
+      </div>
+      <div>
+        <p className="text-sm text-gray-600 mb-1">{label}</p>
+        <p className="text-2xl font-bold text-gray-900">{value}</p>
+      </div>
+    </div>
+  );
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-96">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-neutral-900">Dashboard</h1>
-          <p className="text-sm text-neutral-600 mt-1">Key operational metrics for your branch.</p>
-        </div>
-
-        <Button onClick={handleRefresh} variant="outline" disabled={loading}>
-          <RefreshCw className={`w-4 h-4 mr-2 ${loading ? "animate-spin" : ""}`} />
-          Refresh
-        </Button>
+      {/* Stats Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <StatCard
+          icon={DollarSign}
+          label="Doanh thu hôm nay"
+          value={formatCurrency(summary?.todayRevenue)}
+          color="emerald"
+        />
+        <StatCard
+          icon={TrendingUp}
+          label="Doanh thu tháng này"
+          value={formatCurrency(summary?.monthRevenue)}
+          color="blue"
+        />
+        <StatCard icon={Calendar} label="Lịch hẹn hôm nay" value={summary?.todayAppointments || 0} color="purple" />
+        <StatCard icon={Users} label="Khách hàng tháng này" value={summary?.monthCustomers || 0} color="amber" />
       </div>
 
-      {/* Testing Controls - Collapsible */}
-      <details className="bg-neutral-50 border border-neutral-200 rounded-lg p-4">
-        <summary className="cursor-pointer font-medium text-neutral-700 text-sm">
-          🔧 Testing Controls (Click to expand)
-        </summary>
-        <div className="flex gap-4 items-end mt-4">
-          <div className="flex-1">
-            <label className="block text-sm font-medium text-neutral-700 mb-1">Branch ID (for testing)</label>
-            <input
-              type="number"
-              value={branchId}
-              onChange={(e) => setBranchId(Number(e.target.value))}
-              className="w-full px-3 py-2 border border-neutral-300 rounded-lg"
+      {/* Revenue Chart */}
+      <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">Doanh thu 30 ngày gần nhất</h3>
+        <ResponsiveContainer width="100%" height={300}>
+          <LineChart data={revenueChart}>
+            <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+            <XAxis dataKey="date" stroke="#6b7280" fontSize={12} />
+            <YAxis stroke="#6b7280" fontSize={12} tickFormatter={(value) => `${(value / 1000000).toFixed(1)}M`} />
+            <Tooltip
+              formatter={(value) => formatCurrency(value)}
+              contentStyle={{
+                backgroundColor: "white",
+                border: "1px solid #e5e7eb",
+                borderRadius: "8px",
+              }}
             />
-          </div>
-          <Button onClick={saveBranch} variant="primary">
-            Load Data
-          </Button>
-        </div>
-        <div className="mt-2 text-xs text-neutral-600 bg-blue-50 p-2 rounded border border-blue-200">
-          💡 <strong>Tip:</strong> Change Branch ID to test different branches (1, 2, 3, etc.)
-        </div>
-      </details>
+            <Line
+              type="monotone"
+              dataKey="revenue"
+              stroke="#3b82f6"
+              strokeWidth={2}
+              dot={{ fill: "#3b82f6", r: 4 }}
+              activeDot={{ r: 6 }}
+            />
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
 
-      {/* Error Alert */}
-      {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg">
-          <strong className="font-medium">Error: </strong>
-          <span>{error}</span>
+      {/* Alerts */}
+      {alerts.length > 0 && (
+        <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+            <AlertCircle className="w-5 h-5 text-amber-600" />
+            Thông báo quan trọng
+          </h3>
+          <div className="space-y-3">
+            {alerts.map((alert, idx) => (
+              <div
+                key={idx}
+                className={`p-4 rounded-lg border-l-4 ${
+                  alert.severity === "warning"
+                    ? "bg-amber-50 border-amber-500"
+                    : alert.severity === "error"
+                    ? "bg-red-50 border-red-500"
+                    : "bg-blue-50 border-blue-500"
+                }`}
+              >
+                <p className="font-medium text-gray-900 text-sm">{alert.title}</p>
+                <p className="text-sm text-gray-600 mt-1">{alert.message}</p>
+              </div>
+            ))}
+          </div>
         </div>
       )}
-
-      {/* Stats Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        <StatCard
-          title="Today's Revenue"
-          value={`${stats.todayRevenue.toLocaleString("vi-VN")} VNĐ`}
-          icon={<DollarSign className="w-6 h-6" />}
-          iconBg="bg-green-100 text-green-600"
-          valueColor="text-green-600"
-        />
-        <StatCard
-          title="Active Staff"
-          value={stats.activeStaff}
-          icon={<Users className="w-6 h-6" />}
-          iconBg="bg-blue-100 text-blue-600"
-          valueColor="text-blue-600"
-        />
-        <StatCard
-          title="Low Stock Items"
-          value={stats.lowStockItems}
-          icon={<AlertTriangle className="w-6 h-6" />}
-          iconBg="bg-red-100 text-red-600"
-          valueColor="text-red-600"
-        />
-      </div>
-
-      {/* Charts & Tables */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Revenue Chart with Time Range Selector */}
-        <Card className="p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold text-neutral-900">Revenue Trend</h3>
-            <Calendar className="w-5 h-5 text-neutral-400" />
-          </div>
-
-          {/* Time Range Selector - ALWAYS VISIBLE */}
-          <div className="flex flex-wrap gap-2 mb-4">
-            <button
-              className={`px-3 py-1.5 text-sm font-medium rounded-lg transition-colors ${
-                chartDateRange === "7days"
-                  ? "bg-blue-600 text-white"
-                  : "bg-neutral-100 text-neutral-700 hover:bg-neutral-200"
-              }`}
-              onClick={() => setChartDateRange("7days")}
-            >
-              Last 7 Days
-            </button>
-            <button
-              className={`px-3 py-1.5 text-sm font-medium rounded-lg transition-colors ${
-                chartDateRange === "14days"
-                  ? "bg-blue-600 text-white"
-                  : "bg-neutral-100 text-neutral-700 hover:bg-neutral-200"
-              }`}
-              onClick={() => setChartDateRange("14days")}
-            >
-              Last 14 Days
-            </button>
-            <button
-              className={`px-3 py-1.5 text-sm font-medium rounded-lg transition-colors ${
-                chartDateRange === "30days"
-                  ? "bg-blue-600 text-white"
-                  : "bg-neutral-100 text-neutral-700 hover:bg-neutral-200"
-              }`}
-              onClick={() => setChartDateRange("30days")}
-            >
-              Last 30 Days
-            </button>
-            <button
-              className={`px-3 py-1.5 text-sm font-medium rounded-lg transition-colors ${
-                chartDateRange === "custom"
-                  ? "bg-blue-600 text-white"
-                  : "bg-neutral-100 text-neutral-700 hover:bg-neutral-200"
-              }`}
-              onClick={() => setChartDateRange("custom")}
-            >
-              Custom Range
-            </button>
-          </div>
-
-          {/* Custom Date Range */}
-          {chartDateRange === "custom" && (
-            <div className="mb-4">
-              <div className="grid grid-cols-2 gap-2 p-3 bg-blue-50 rounded-lg border border-blue-200">
-                <div>
-                  <label className="block text-xs font-medium text-neutral-700 mb-1">
-                    From (auto sets To = From + 7 days)
-                  </label>
-                  <input
-                    type="date"
-                    value={customFrom}
-                    onChange={(e) => handleCustomFromChange(e.target.value)}
-                    max={dateISO(new Date())}
-                    className="w-full px-2 py-1 text-sm border border-neutral-300 rounded focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-neutral-700 mb-1">To</label>
-                  <input
-                    type="date"
-                    value={customTo}
-                    onChange={(e) => handleCustomToChange(e.target.value)}
-                    min={customFrom}
-                    max={dateISO(new Date())}
-                    className="w-full px-2 py-1 text-sm border border-neutral-300 rounded focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-              </div>
-
-              {/* Date Range Error/Warning */}
-              {dateRangeError ? (
-                <div className="mt-2 flex items-start gap-2 text-xs text-red-600 bg-red-50 p-2 rounded border border-red-200">
-                  <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
-                  <span>{dateRangeError}</span>
-                </div>
-              ) : (
-                <div className="mt-2 text-xs text-blue-600 bg-blue-50 p-2 rounded border border-blue-200">
-                  ℹ️ Maximum date range is 7 days for optimal performance
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Chart */}
-          <RevenueChart data={revenue7d} />
-        </Card>
-
-        {/* Urgent Alerts */}
-        <UrgentAlertsTable items={urgentItems} />
-      </div>
     </div>
   );
 };

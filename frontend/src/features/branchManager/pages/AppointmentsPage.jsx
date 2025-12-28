@@ -1,398 +1,193 @@
-import React, { useEffect, useMemo, useState, useCallback } from "react";
-import { Card } from "../../../shared/components/ui/Card";
-import Button from "../../../shared/components/ui/Button";
-import { branchManagerApi } from "../../../api/branchManagerApi";
-import { Calendar, Search, Download, RefreshCw, CheckCircle, Clock, XCircle, AlertCircle } from "lucide-react";
+// frontend/src/features/branchManager/pages/AppointmentsPage.jsx
 
-// ==================== HELPER FUNCTIONS ====================
-function getDefaultBranchId() {
-  const v = localStorage.getItem("branchId");
-  return v ? Number(v) : 1;
-}
+import React, { useState, useEffect } from "react";
+import branchManagerApi from "../../../api/branchManagerApi";
+import {
+  Calendar,
+  Clock,
+  User,
+  Phone,
+  Heart,
+  Filter,
+  RefreshCw,
+  CheckCircle,
+  XCircle,
+  AlertCircle,
+} from "lucide-react";
 
-function dateISO(d) {
-  const x = new Date(d);
-  const yyyy = x.getFullYear();
-  const mm = String(x.getMonth() + 1).padStart(2, "0");
-  const dd = String(x.getDate()).padStart(2, "0");
-  return `${yyyy}-${mm}-${dd}`;
-}
-
-function formatDateTime(dateString) {
-  const date = new Date(dateString);
-  const time = date.toLocaleTimeString("vi-VN", {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-  const dateStr = date.toLocaleDateString("vi-VN", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-  });
-  return { time, date: dateStr };
-}
-
-// ==================== STATUS BADGE ====================
-function StatusBadge({ status }) {
-  const config = {
-    Completed: { bg: "bg-green-100", text: "text-green-700", label: "Completed" },
-    Booked: { bg: "bg-blue-100", text: "text-blue-700", label: "Booked" },
-    Scheduled: { bg: "bg-yellow-100", text: "text-yellow-700", label: "Scheduled" },
-    Cancelled: { bg: "bg-red-100", text: "text-red-700", label: "Cancelled" },
-  };
-  const style = config[status] || { bg: "bg-gray-100", text: "text-gray-700", label: status };
-
-  return (
-    <span
-      className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${style.bg} ${style.text}`}
-    >
-      {style.label}
-    </span>
-  );
-}
-
-// ==================== STATS CARD ====================
-function StatsCard({ title, value, icon: Icon, color = "blue" }) {
-  const colorClasses = {
-    blue: "bg-blue-50 text-blue-600",
-    green: "bg-green-50 text-green-600",
-    yellow: "bg-yellow-50 text-yellow-600",
-    red: "bg-red-50 text-red-600",
-  };
-
-  return (
-    <Card className="p-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <p className="text-sm font-medium text-neutral-600">{title}</p>
-          <p className="text-2xl font-bold text-neutral-900 mt-1">{value}</p>
-        </div>
-        {Icon && (
-          <div className={`p-3 rounded-lg ${colorClasses[color]}`}>
-            <Icon className="w-6 h-6" />
-          </div>
-        )}
-      </div>
-    </Card>
-  );
-}
-
-// ==================== MAIN COMPONENT ====================
-export default function AppointmentsPage() {
-  const [branchId, setBranchId] = useState(getDefaultBranchId());
-  const [from, setFrom] = useState(dateISO(new Date(Date.now() - 7 * 86400000)));
-  const [to, setTo] = useState(dateISO(new Date()));
-  const [statusFilter, setStatusFilter] = useState("");
-  const [searchQuery, setSearchQuery] = useState("");
-
+const AppointmentsPage = () => {
+  const branchId = 10;
   const [appointments, setAppointments] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [statusFilter, setStatusFilter] = useState("");
+  const [dateRange, setDateRange] = useState({
+    from: new Date().toISOString().split("T")[0],
+    to: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
+  });
 
-  // ==================== STATS CALCULATION ====================
-  const stats = useMemo(() => {
-    const total = appointments.length;
-    const completed = appointments.filter((a) => a.Status === "Completed").length;
-    const booked = appointments.filter((a) => a.Status === "Booked" || a.Status === "Scheduled").length;
-    const cancelled = appointments.filter((a) => a.Status === "Cancelled").length;
+  useEffect(() => {
+    fetchAppointments();
+  }, [dateRange, statusFilter]);
 
-    return { total, completed, booked, cancelled };
-  }, [appointments]);
-
-  // ==================== FILTERED DATA ====================
-  const filteredAppointments = useMemo(() => {
-    let result = appointments;
-
-    // Filter by status
-    if (statusFilter) {
-      result = result.filter((a) => a.Status === statusFilter);
-    }
-
-    // Filter by search query
-    if (searchQuery.trim()) {
-      const query = searchQuery.toLowerCase();
-      result = result.filter(
-        (a) =>
-          a.CustomerName?.toLowerCase().includes(query) ||
-          a.PetName?.toLowerCase().includes(query) ||
-          a.Phone?.toLowerCase().includes(query) ||
-          a.DoctorName?.toLowerCase().includes(query)
-      );
-    }
-
-    return result;
-  }, [appointments, statusFilter, searchQuery]);
-
-  // ==================== LOAD DATA ====================
-  const load = useCallback(async () => {
-    // Validate dates
-    const fromD = new Date(from);
-    const toD = new Date(to);
-
-    if (fromD > toD) {
-      setError("Start date must be before end date");
-      return;
-    }
-
+  const fetchAppointments = async () => {
     try {
       setLoading(true);
-      setError("");
-
-      const params = {
-        branchId,
-        from,
-        to,
-        ...(statusFilter && { status: statusFilter }),
-      };
-
-      const res = await branchManagerApi.listAppointments(params);
-      setAppointments(res.data?.data?.items || []);
-    } catch (e) {
-      setError(e.response?.data?.message || e.message);
+      const res = await branchManagerApi.getAppointments(branchId, dateRange.from, dateRange.to, statusFilter);
+      setAppointments(res.data.appointments || []);
+    } catch (error) {
+      console.error("Error fetching appointments:", error);
     } finally {
       setLoading(false);
     }
-  }, [branchId, from, to, statusFilter]);
+  };
 
-  useEffect(() => {
-    load();
-  }, [load]);
+  const formatDateTime = (dateString) => {
+    return new Date(dateString).toLocaleString("vi-VN");
+  };
 
-  // ==================== HANDLERS ====================
-  function saveBranch() {
-    localStorage.setItem("branchId", String(branchId));
-    load();
-  }
+  const getStatusBadge = (status) => {
+    const config = {
+      Scheduled: { bg: "bg-blue-100", text: "text-blue-800", icon: Clock, label: "Đã đặt" },
+      Completed: { bg: "bg-emerald-100", text: "text-emerald-800", icon: CheckCircle, label: "Hoàn thành" },
+      Cancelled: { bg: "bg-red-100", text: "text-red-800", icon: XCircle, label: "Đã hủy" },
+    };
+    const c = config[status] || config.Scheduled;
+    const Icon = c.icon;
+    return (
+      <span className={`${c.bg} ${c.text} px-3 py-1 rounded-full text-sm font-medium inline-flex items-center gap-1`}>
+        <Icon className="w-4 h-4" />
+        {c.label}
+      </span>
+    );
+  };
 
-  function handleExport() {
-    const headers = ["Time", "Pet", "Customer", "Phone", "Service", "Doctor", "Status"];
-    const rows = filteredAppointments.map((a) => {
-      const { time, date } = formatDateTime(a.ScheduleTime);
-      return [
-        `${date} ${time}`,
-        a.PetName,
-        a.CustomerName,
-        a.Phone || "",
-        a.ServiceName,
-        a.DoctorName || "—",
-        a.Status,
-      ];
-    });
-
-    const csvContent = [headers.join(","), ...rows.map((row) => row.map((cell) => `"${cell}"`).join(","))].join("\n");
-
-    const blob = new Blob([csvContent], { type: "text/csv" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `appointments_${branchId}_${from}_${to}.csv`;
-    link.click();
-  }
-
-  // ==================== RENDER ====================
   return (
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-neutral-900">Appointments</h1>
-          <p className="text-sm text-neutral-600 mt-1">Manage and track appointments by date range and status</p>
+          <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-3">
+            <Calendar className="w-8 h-8 text-blue-600" />
+            Quản lý Lịch hẹn
+          </h1>
+          <p className="text-gray-600 mt-1">Theo dõi lịch hẹn khám bệnh</p>
         </div>
-
-        <div className="flex gap-2">
-          <Button onClick={load} variant="outline" disabled={loading}>
-            <RefreshCw className={`w-4 h-4 mr-2 ${loading ? "animate-spin" : ""}`} />
-            Refresh
-          </Button>
-          <Button onClick={handleExport} variant="outline" disabled={filteredAppointments.length === 0}>
-            <Download className="w-4 h-4 mr-2" />
-            Export CSV
-          </Button>
-        </div>
+        <button
+          onClick={fetchAppointments}
+          className="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2"
+        >
+          <RefreshCw className="w-5 h-5" />
+          Làm mới
+        </button>
       </div>
 
-      {/* Error Alert */}
-      {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg flex items-start">
-          <AlertCircle className="w-5 h-5 mr-2 flex-shrink-0 mt-0.5" />
-          <span>{error}</span>
-        </div>
-      )}
-
-      {/* Testing Controls - Collapsible */}
-      <details className="bg-neutral-50 border border-neutral-200 rounded-lg p-4">
-        <summary className="cursor-pointer font-medium text-neutral-700 text-sm">
-          🔧 Testing Controls (Click to expand)
-        </summary>
-        <div className="flex gap-4 items-end mt-4">
-          <div className="flex-1">
-            <label className="block text-sm font-medium text-neutral-700 mb-1">Branch ID (for testing)</label>
-            <input
-              type="number"
-              value={branchId}
-              onChange={(e) => setBranchId(Number(e.target.value))}
-              className="w-full px-3 py-2 border border-neutral-300 rounded-lg"
-            />
-          </div>
-          <Button onClick={saveBranch} variant="primary">
-            Load Data
-          </Button>
-        </div>
-        <div className="mt-2 text-xs text-neutral-600 bg-blue-50 p-2 rounded border border-blue-200">
-          💡 <strong>Tip:</strong> Change Branch ID to test different branches (1, 2, 3, etc.)
-        </div>
-      </details>
-
-      {/* Date Range Filter - SIMPLIFIED LIKE REPORTS */}
-      <Card className="p-4">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      {/* Filters */}
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div>
-            <label className="block text-sm font-medium text-neutral-700 mb-1">From</label>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Từ ngày</label>
             <input
               type="date"
-              value={from}
-              onChange={(e) => setFrom(e.target.value)}
-              max={to}
-              className="w-full px-3 py-2 border border-neutral-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              value={dateRange.from}
+              onChange={(e) => setDateRange({ ...dateRange, from: e.target.value })}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
             />
           </div>
-
           <div>
-            <label className="block text-sm font-medium text-neutral-700 mb-1">To</label>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Đến ngày</label>
             <input
               type="date"
-              value={to}
-              onChange={(e) => setTo(e.target.value)}
-              min={from}
-              max={dateISO(new Date())}
-              className="w-full px-3 py-2 border border-neutral-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              value={dateRange.to}
+              onChange={(e) => setDateRange({ ...dateRange, to: e.target.value })}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
             />
           </div>
-
           <div>
-            <label className="block text-sm font-medium text-neutral-700 mb-1">Status</label>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Trạng thái</label>
             <select
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
-              className="w-full px-3 py-2 border border-neutral-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
             >
-              <option value="">All Status</option>
-              <option value="Booked">Booked</option>
-              <option value="Scheduled">Scheduled</option>
-              <option value="Completed">Completed</option>
-              <option value="Cancelled">Cancelled</option>
+              <option value="">Tất cả</option>
+              <option value="Scheduled">Đã đặt</option>
+              <option value="Completed">Hoàn thành</option>
+              <option value="Cancelled">Đã hủy</option>
             </select>
           </div>
-
-          <div className="flex items-end">
-            <button
-              className="w-full px-4 py-2 text-sm font-medium bg-blue-600 text-white hover:bg-blue-700 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              onClick={load}
-              disabled={loading}
-            >
-              Apply Filters
-            </button>
-          </div>
         </div>
-      </Card>
-
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatsCard title="Total" value={stats.total} icon={Calendar} color="blue" />
-        <StatsCard title="Completed" value={stats.completed} icon={CheckCircle} color="green" />
-        <StatsCard title="Booked" value={stats.booked} icon={Clock} color="yellow" />
-        <StatsCard title="Cancelled" value={stats.cancelled} icon={XCircle} color="red" />
       </div>
 
-      {/* Search */}
-      <Card className="p-4">
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-neutral-400 w-5 h-5" />
-          <input
-            type="text"
-            placeholder="Search by customer, pet, phone, or doctor..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 border border-neutral-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-          />
-        </div>
-        {searchQuery && (
-          <div className="mt-2 text-sm text-neutral-600">
-            Found {filteredAppointments.length} of {appointments.length} appointments
-          </div>
-        )}
-      </Card>
-
-      {/* Table */}
-      <Card>
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-neutral-200 bg-neutral-50">
-                <th className="px-4 py-3 text-left text-xs font-medium text-neutral-700 uppercase">Time</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-neutral-700 uppercase">Pet</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-neutral-700 uppercase">Customer</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-neutral-700 uppercase">Service</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-neutral-700 uppercase">Doctor</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-neutral-700 uppercase">Status</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-neutral-200">
-              {loading ? (
-                <tr>
-                  <td colSpan={6} className="px-4 py-8 text-center text-neutral-500">
-                    <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2" />
-                    Loading appointments...
-                  </td>
-                </tr>
-              ) : filteredAppointments.length === 0 ? (
-                <tr>
-                  <td colSpan={6} className="px-4 py-8 text-center text-neutral-500">
-                    {searchQuery || statusFilter
-                      ? "No appointments found. Try adjusting your filters."
-                      : "No appointments found for the selected date range."}
-                  </td>
-                </tr>
-              ) : (
-                filteredAppointments.map((appointment) => {
-                  const { time, date } = formatDateTime(appointment.ScheduleTime);
-                  return (
-                    <tr key={appointment.AppointmentID} className="hover:bg-neutral-50 transition-colors">
-                      <td className="px-4 py-3">
-                        <div className="text-sm font-medium text-neutral-900">{time}</div>
-                        <div className="text-xs text-neutral-500">{date}</div>
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="text-sm font-medium text-neutral-900">{appointment.PetName}</div>
-                        <div className="text-xs text-neutral-500">{appointment.Species}</div>
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="text-sm font-medium text-neutral-900">{appointment.CustomerName}</div>
-                        <div className="text-xs text-neutral-500">{appointment.Phone || "—"}</div>
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="text-sm font-medium text-neutral-900">{appointment.ServiceName}</div>
-                        <div className="text-xs text-neutral-500">{appointment.ServiceType}</div>
-                      </td>
-                      <td className="px-4 py-3 text-sm text-neutral-900">{appointment.DoctorName || "—"}</td>
-                      <td className="px-4 py-3">
-                        <StatusBadge status={appointment.Status} />
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
+      {/* Appointments List */}
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100">
+        <div className="p-6 border-b border-gray-200">
+          <h2 className="text-xl font-semibold">Danh sách lịch hẹn ({appointments.length})</h2>
         </div>
 
-        {/* Footer with count */}
-        {!loading && filteredAppointments.length > 0 && (
-          <div className="px-4 py-3 border-t border-neutral-200 bg-neutral-50 text-sm text-neutral-600">
-            Showing {filteredAppointments.length} of {appointments.length} appointments
+        {loading ? (
+          <div className="p-12 text-center">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
+          </div>
+        ) : appointments.length === 0 ? (
+          <div className="p-12 text-center">
+            <Calendar className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+            <p className="text-gray-600">Không có lịch hẹn nào</p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-gray-50 border-b">
+                <tr>
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Thời gian</th>
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Khách hàng</th>
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Thú cưng</th>
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Dịch vụ</th>
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Bác sĩ</th>
+                  <th className="px-6 py-3 text-center text-xs font-semibold text-gray-700 uppercase">Trạng thái</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-200">
+                {appointments.map((apt) => (
+                  <tr key={apt.AppointmentID} className="hover:bg-gray-50">
+                    <td className="px-6 py-4">
+                      <div className="flex items-center gap-2 text-sm font-medium text-gray-900">
+                        <Clock className="w-4 h-4 text-gray-500" />
+                        {formatDateTime(apt.ScheduleTime)}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div>
+                        <div className="flex items-center gap-2 font-medium text-gray-900">
+                          <User className="w-4 h-4 text-gray-500" />
+                          {apt.CustomerName}
+                        </div>
+                        <div className="flex items-center gap-2 text-sm text-gray-600 mt-1">
+                          <Phone className="w-3 h-3" />
+                          {apt.Phone}
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="flex items-center gap-2">
+                        <Heart className="w-4 h-4 text-pink-500" />
+                        <div>
+                          <div className="font-medium text-gray-900">{apt.PetName}</div>
+                          <div className="text-sm text-gray-500">{apt.Species}</div>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 text-sm text-gray-900">{apt.ServiceName}</td>
+                    <td className="px-6 py-4 text-sm text-gray-900">{apt.DoctorName || "Chưa phân công"}</td>
+                    <td className="px-6 py-4 text-center">{getStatusBadge(apt.Status)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         )}
-      </Card>
+      </div>
     </div>
   );
-}
+};
+
+export default AppointmentsPage;

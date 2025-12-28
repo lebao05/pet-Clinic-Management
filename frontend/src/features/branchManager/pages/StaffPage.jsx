@@ -1,336 +1,270 @@
-import React, { useEffect, useState, useMemo } from "react";
-import { Card } from "../../../shared/components/ui/Card";
-import Button from "../../../shared/components/ui/Button";
-import { branchManagerApi } from "../../../api/branchManagerApi";
-import { UserPlus, UserMinus, AlertCircle, Search, RefreshCw } from "lucide-react";
+// frontend/src/features/branchManager/pages/StaffPage.jsx
 
-function getDefaultBranchId() {
-  const v = localStorage.getItem("branchId");
-  return v ? Number(v) : 1;
-}
+import React, { useState, useEffect } from "react";
+import branchManagerApi from "../../../api/branchManagerApi";
+import { useBranch } from "../../../hooks/useBranch";
+import { Users, TrendingUp, DollarSign, Star, Calendar, RefreshCw, Award } from "lucide-react";
 
-function dateISO(d) {
-  const x = new Date(d);
-  const yyyy = x.getFullYear();
-  const mm = String(x.getMonth() + 1).padStart(2, "0");
-  const dd = String(x.getDate()).padStart(2, "0");
-  return `${yyyy}-${mm}-${dd}`;
-}
-
-export default function StaffPage() {
-  const [branchId, setBranchId] = useState(getDefaultBranchId());
-  const [date, setDate] = useState(dateISO(new Date()));
+const StaffPage = () => {
+  const { branchId } = useBranch();
+  const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState("list"); // list, performance
   const [staff, setStaff] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-  const [searchQuery, setSearchQuery] = useState("");
+  const [performance, setPerformance] = useState([]);
+  const [dateRange, setDateRange] = useState({
+    from: new Date(new Date().setMonth(new Date().getMonth() - 1)).toISOString().split("T")[0],
+    to: new Date().toISOString().split("T")[0],
+  });
 
-  const [newEmployeeId, setNewEmployeeId] = useState("");
-  const [newStartDate, setNewStartDate] = useState(dateISO(new Date()));
+  useEffect(() => {
+    if (activeTab === "list") fetchStaff();
+    else fetchPerformance();
+  }, [activeTab, dateRange]);
 
-  // ==================== FILTERED STAFF ====================
-  const filteredStaff = useMemo(() => {
-    if (!searchQuery.trim()) return staff;
-
-    const query = searchQuery.toLowerCase();
-    return staff.filter(
-      (s) =>
-        s.FullName?.toLowerCase().includes(query) ||
-        String(s.EmployeeID).includes(query) ||
-        s.Role?.toLowerCase().includes(query) ||
-        s.WorkStatus?.toLowerCase().includes(query)
-    );
-  }, [staff, searchQuery]);
-
-  // ==================== LOAD DATA ====================
-  async function load() {
+  const fetchStaff = async () => {
     try {
       setLoading(true);
-      setError("");
-      const res = await branchManagerApi.listStaff(branchId, date);
-      setStaff(res.data?.data?.staff || []);
-    } catch (e) {
-      setError(e.response?.data?.message || e.message);
+      const res = await branchManagerApi.getBranchStaff(branchId);
+      setStaff(res.data.staff || []);
+    } catch (error) {
+      console.error("Error fetching staff:", error);
     } finally {
       setLoading(false);
     }
-  }
+  };
 
-  useEffect(() => {
-    load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  function saveBranch() {
-    localStorage.setItem("branchId", String(branchId));
-    load();
-  }
-
-  // ==================== CREATE ASSIGNMENT ====================
-  async function createAssignment() {
-    if (!newEmployeeId) {
-      setError("Please enter Employee ID");
-      return;
-    }
-
+  const fetchPerformance = async () => {
     try {
-      setError("");
-      await branchManagerApi.createAssignment({
-        employeeId: Number(newEmployeeId),
-        branchId,
-        startDate: newStartDate,
-      });
-      setNewEmployeeId("");
-      load();
-    } catch (e) {
-      setError(e.response?.data?.message || e.message);
+      setLoading(true);
+      const res = await branchManagerApi.getStaffPerformance(branchId, dateRange.from, dateRange.to);
+      setPerformance(res.data.performance || []);
+    } catch (error) {
+      console.error("Error fetching performance:", error);
+    } finally {
+      setLoading(false);
     }
-  }
+  };
 
-  // ==================== END ASSIGNMENT ====================
-  async function endAssignment(assignmentId, employeeName) {
-    const confirmed = window.confirm(`Are you sure you want to end the assignment for ${employeeName}?`);
+  const formatCurrency = (value) => {
+    return new Intl.NumberFormat("vi-VN", {
+      style: "currency",
+      currency: "VND",
+      maximumFractionDigits: 0,
+    }).format(value || 0);
+  };
 
-    if (!confirmed) return;
+  const formatDate = (dateString) => {
+    if (!dateString) return "N/A";
+    return new Date(dateString).toLocaleDateString("vi-VN");
+  };
 
-    try {
-      setError("");
-      await branchManagerApi.endAssignment(assignmentId, dateISO(new Date()));
-      load();
-    } catch (e) {
-      setError(e.response?.data?.message || e.message);
-    }
-  }
+  const getRoleBadge = (role) => {
+    const config = {
+      Doctor: { bg: "bg-blue-100", text: "text-blue-800", label: "Bác sĩ" },
+      Receptionist: { bg: "bg-purple-100", text: "text-purple-800", label: "Lễ tân" },
+      Cashier: { bg: "bg-emerald-100", text: "text-emerald-800", label: "Thu ngân" },
+      Manager: { bg: "bg-amber-100", text: "text-amber-800", label: "Quản lý" },
+    };
+    const c = config[role] || { bg: "bg-gray-100", text: "text-gray-800", label: role };
+    return <span className={`${c.bg} ${c.text} px-3 py-1 rounded-full text-sm font-medium`}>{c.label}</span>;
+  };
+
+  const tabs = [
+    { id: "list", label: "Danh sách", icon: Users },
+    { id: "performance", label: "Hiệu suất", icon: TrendingUp },
+  ];
 
   return (
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-neutral-900">Staff Management</h1>
-          <p className="text-sm text-neutral-600 mt-1">View active staff in a branch, and manage assignment history.</p>
+          <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-3">
+            <Users className="w-8 h-8 text-indigo-600" />
+            Quản lý Nhân viên
+          </h1>
+          <p className="text-gray-600 mt-1">Theo dõi nhân sự và hiệu suất làm việc</p>
         </div>
-
-        <Button onClick={load} variant="outline" disabled={loading}>
-          <RefreshCw className={`w-4 h-4 mr-2 ${loading ? "animate-spin" : ""}`} />
-          Refresh
-        </Button>
+        <button
+          onClick={() => (activeTab === "list" ? fetchStaff() : fetchPerformance())}
+          className="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2"
+        >
+          <RefreshCw className="w-5 h-5" />
+          Làm mới
+        </button>
       </div>
 
-      {/* Error Alert */}
-      {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg flex items-start">
-          <AlertCircle className="w-5 h-5 mr-2 flex-shrink-0 mt-0.5" />
-          <span>{error}</span>
+      {/* Tabs */}
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100">
+        <div className="border-b border-gray-200 flex">
+          {tabs.map((tab) => {
+            const Icon = tab.icon;
+            return (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={`px-6 py-4 font-medium transition-colors flex items-center gap-2 ${
+                  activeTab === tab.id
+                    ? "text-indigo-600 border-b-2 border-indigo-600"
+                    : "text-gray-600 hover:text-gray-900"
+                }`}
+              >
+                <Icon className="w-5 h-5" />
+                {tab.label}
+              </button>
+            );
+          })}
         </div>
-      )}
 
-      {/* Filters - Hidden Branch ID Input (for testing only) */}
-      <details className="bg-neutral-50 border border-neutral-200 rounded-lg p-4">
-        <summary className="cursor-pointer font-medium text-neutral-700 text-sm">
-          🔧 Testing Controls (Click to expand)
-        </summary>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
-          <div>
-            <label className="block text-sm font-medium text-neutral-700 mb-1">Branch ID (for testing)</label>
-            <input
-              type="number"
-              value={branchId}
-              onChange={(e) => setBranchId(Number(e.target.value))}
-              className="w-full px-3 py-2 border border-neutral-300 rounded-lg"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-neutral-700 mb-1">Date</label>
-            <input
-              type="date"
-              value={date}
-              onChange={(e) => setDate(e.target.value)}
-              className="w-full px-3 py-2 border border-neutral-300 rounded-lg"
-            />
-          </div>
-          <div className="flex items-end">
-            <Button onClick={saveBranch} variant="primary" className="w-full">
-              Load Data
-            </Button>
-          </div>
-        </div>
-        <div className="mt-2 text-xs text-neutral-600 bg-blue-50 p-2 rounded border border-blue-200">
-          💡 <strong>Tip:</strong> Change Branch ID to test different branches (1, 2, 3, etc.)
-        </div>
-      </details>
-
-      {/* Add New Assignment */}
-      <Card className="p-4 bg-blue-50 border-blue-200">
-        <h3 className="text-sm font-semibold text-neutral-900 mb-3 flex items-center">
-          <UserPlus className="w-4 h-4 mr-2" />
-          Assign New Employee
-        </h3>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-neutral-700 mb-1">Employee ID *</label>
-            <input
-              type="number"
-              value={newEmployeeId}
-              onChange={(e) => setNewEmployeeId(e.target.value)}
-              placeholder="Enter Employee ID"
-              className="w-full px-3 py-2 border border-neutral-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-neutral-700 mb-1">Start Date *</label>
-            <input
-              type="date"
-              value={newStartDate}
-              onChange={(e) => setNewStartDate(e.target.value)}
-              className="w-full px-3 py-2 border border-neutral-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
-          <div className="flex items-end">
-            <Button onClick={createAssignment} variant="primary" className="w-full" disabled={!newEmployeeId}>
-              <UserPlus className="w-4 h-4 mr-2" />
-              Assign Employee
-            </Button>
-          </div>
-        </div>
-        <p className="text-xs text-neutral-600 mt-2">
-          💡 Tip: You can assign Doctors, Cashiers, or Receptionists by their Employee ID
-        </p>
-      </Card>
-
-      {/* Search Bar */}
-      <Card className="p-4">
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-neutral-400 w-5 h-5" />
-          <input
-            type="text"
-            placeholder="Search by name, employee ID, role, or status..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 border border-neutral-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-          />
-        </div>
-        {searchQuery && (
-          <div className="mt-2 text-sm text-neutral-600">
-            Found {filteredStaff.length} of {staff.length} staff members
-          </div>
-        )}
-      </Card>
-
-      {/* Stats Summary */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <Card className="p-4">
-          <div className="text-sm text-neutral-600">Total Staff</div>
-          <div className="text-2xl font-bold text-neutral-900 mt-1">{staff.length}</div>
-        </Card>
-        <Card className="p-4">
-          <div className="text-sm text-neutral-600">Active Status</div>
-          <div className="text-2xl font-bold text-green-600 mt-1">
-            {staff.filter((s) => s.WorkStatus === "Active").length}
-          </div>
-        </Card>
-        <Card className="p-4">
-          <div className="text-sm text-neutral-600">Doctors</div>
-          <div className="text-2xl font-bold text-blue-600 mt-1">{staff.filter((s) => s.Role === "Doctor").length}</div>
-        </Card>
-      </div>
-
-      {/* Staff Table */}
-      <Card>
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-neutral-200 bg-neutral-50">
-                <th className="px-4 py-3 text-left text-xs font-medium text-neutral-700 uppercase">Employee</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-neutral-700 uppercase">Role</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-neutral-700 uppercase">Work Status</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-neutral-700 uppercase">
-                  Assignment Period
-                </th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-neutral-700 uppercase">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-neutral-200">
+        <div className="p-6">
+          {/* Staff List */}
+          {activeTab === "list" && (
+            <div>
               {loading ? (
-                <tr>
-                  <td colSpan={5} className="px-4 py-8 text-center text-neutral-500">
-                    <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2" />
-                    Loading staff...
-                  </td>
-                </tr>
-              ) : filteredStaff.length === 0 ? (
-                <tr>
-                  <td colSpan={5} className="px-4 py-8 text-center text-neutral-500">
-                    {searchQuery
-                      ? `No staff found matching "${searchQuery}"`
-                      : "No active staff found for this branch/date."}
-                  </td>
-                </tr>
+                <div className="py-12 text-center">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600 mx-auto"></div>
+                </div>
               ) : (
-                filteredStaff.map((s) => (
-                  <tr key={s.AssignmentID} className="hover:bg-neutral-50 transition-colors">
-                    <td className="px-4 py-3">
-                      <div className="text-sm font-medium text-neutral-900">{s.FullName}</div>
-                      <div className="text-xs text-neutral-500">ID: {s.EmployeeID}</div>
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700">
-                        {s.Role}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <span
-                        className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                          s.WorkStatus === "Active" ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-700"
-                        }`}
-                      >
-                        {s.WorkStatus}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-sm text-neutral-600">
-                      <div className="space-y-1">
-                        <div className="flex items-center">
-                          <span className="text-xs text-neutral-500 w-12">Start:</span>
-                          <span className="font-medium">
-                            {s.StartDate ? new Date(s.StartDate).toLocaleDateString("vi-VN") : "—"}
-                          </span>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {staff.map((member) => (
+                    <div
+                      key={member.EmployeeID}
+                      className="bg-gradient-to-br from-indigo-50 to-blue-50 rounded-xl p-6 border border-indigo-200"
+                    >
+                      <div className="flex items-center gap-3 mb-4">
+                        <div className="w-14 h-14 rounded-full bg-indigo-500 text-white flex items-center justify-center font-bold text-xl">
+                          {member.FullName.charAt(0)}
                         </div>
-                        <div className="flex items-center">
-                          <span className="text-xs text-neutral-500 w-12">End:</span>
-                          <span className={s.EndDate ? "font-medium" : "text-neutral-400"}>
-                            {s.EndDate ? new Date(s.EndDate).toLocaleDateString("vi-VN") : "Ongoing"}
-                          </span>
+                        <div className="flex-1">
+                          <h3 className="font-semibold text-gray-900">{member.FullName}</h3>
+                          <div className="mt-1">{getRoleBadge(member.Role)}</div>
                         </div>
                       </div>
-                    </td>
-                    <td className="px-4 py-3">
-                      {!s.EndDate && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => endAssignment(s.AssignmentID, s.FullName)}
-                          className="hover:bg-red-50 hover:border-red-300 hover:text-red-700"
-                        >
-                          <UserMinus className="w-4 h-4 mr-1" />
-                          End
-                        </Button>
-                      )}
-                      {s.EndDate && <span className="text-xs text-neutral-400 italic">Ended</span>}
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
 
-        {/* Footer */}
-        {!loading && filteredStaff.length > 0 && (
-          <div className="px-4 py-3 border-t border-neutral-200 bg-neutral-50 text-sm text-neutral-600">
-            Showing {filteredStaff.length} {searchQuery && `of ${staff.length}`} staff member(s)
-          </div>
-        )}
-      </Card>
+                      <div className="space-y-2 text-sm text-gray-600">
+                        <div className="flex items-center gap-2">
+                          <Calendar className="w-4 h-4" />
+                          <span>Sinh: {formatDate(member.DateOfBirth)}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <DollarSign className="w-4 h-4" />
+                          <span>Lương: {formatCurrency(member.BaseSalary)}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Calendar className="w-4 h-4" />
+                          <span>Vào làm: {formatDate(member.StartDate)}</span>
+                        </div>
+                      </div>
+
+                      <div className="mt-4 pt-4 border-t border-indigo-200">
+                        <span
+                          className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${
+                            member.WorkStatus === "Active"
+                              ? "bg-emerald-100 text-emerald-800"
+                              : "bg-gray-100 text-gray-800"
+                          }`}
+                        >
+                          {member.WorkStatus === "Active" ? "Đang làm việc" : "Nghỉ việc"}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Performance */}
+          {activeTab === "performance" && (
+            <div className="space-y-6">
+              <div className="flex items-center gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Từ ngày</label>
+                  <input
+                    type="date"
+                    value={dateRange.from}
+                    onChange={(e) => setDateRange({ ...dateRange, from: e.target.value })}
+                    className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Đến ngày</label>
+                  <input
+                    type="date"
+                    value={dateRange.to}
+                    onChange={(e) => setDateRange({ ...dateRange, to: e.target.value })}
+                    className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
+              </div>
+
+              {loading ? (
+                <div className="py-12 text-center">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600 mx-auto"></div>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead className="bg-gray-50 border-b">
+                      <tr>
+                        <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Nhân viên</th>
+                        <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Chức vụ</th>
+                        <th className="px-6 py-3 text-center text-xs font-semibold text-gray-700 uppercase">
+                          Đơn hàng
+                        </th>
+                        <th className="px-6 py-3 text-right text-xs font-semibold text-gray-700 uppercase">
+                          Doanh thu
+                        </th>
+                        <th className="px-6 py-3 text-center text-xs font-semibold text-gray-700 uppercase">
+                          Đánh giá
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-200">
+                      {performance.map((perf, idx) => (
+                        <tr key={perf.EmployeeID} className="hover:bg-gray-50">
+                          <td className="px-6 py-4">
+                            <div className="flex items-center gap-3">
+                              {idx < 3 && (
+                                <Award
+                                  className={`w-5 h-5 ${
+                                    idx === 0 ? "text-yellow-500" : idx === 1 ? "text-gray-400" : "text-amber-600"
+                                  }`}
+                                />
+                              )}
+                              <div className="font-medium text-gray-900">{perf.FullName}</div>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4">{getRoleBadge(perf.Role)}</td>
+                          <td className="px-6 py-4 text-center">
+                            <span className="font-semibold text-gray-900">{perf.totalOrders}</span>
+                          </td>
+                          <td className="px-6 py-4 text-right font-medium text-emerald-700">
+                            {formatCurrency(perf.totalRevenue)}
+                          </td>
+                          <td className="px-6 py-4 text-center">
+                            {perf.avgRating ? (
+                              <div className="flex items-center justify-center gap-1">
+                                <Star className="w-4 h-4 text-yellow-400 fill-yellow-400" />
+                                <span className="font-semibold text-gray-900">{perf.avgRating.toFixed(1)}</span>
+                                <span className="text-xs text-gray-500">({perf.ratingCount})</span>
+                              </div>
+                            ) : (
+                              <span className="text-gray-400">Chưa có</span>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
-}
+};
+
+export default StaffPage;

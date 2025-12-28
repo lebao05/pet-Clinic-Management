@@ -1,27 +1,53 @@
-// src/routes/ManagerRoutes.jsx
+// frontend/src/routes/ManagerRoutes.jsx
+
 import React from "react";
-import { Routes, Route } from "react-router-dom";
+import { Routes, Route, Navigate } from "react-router-dom";
 import ManagerLayout from "../features/branchManager/layouts/ManagerLayout";
+
+// Import all pages
 import DashboardPage from "../features/branchManager/pages/DashboardPage";
-import StaffPage from "../features/branchManager/pages/StaffPage";
+import RevenuePage from "../features/branchManager/pages/RevenuePage";
+import VaccinationPage from "../features/branchManager/pages/VaccinationPage";
 import InventoryPage from "../features/branchManager/pages/InventoryPage";
 import AppointmentsPage from "../features/branchManager/pages/AppointmentsPage";
-import ServicesPage from "../features/branchManager/pages/ServicesPage";
+import StaffPage from "../features/branchManager/pages/StaffPage";
+import CustomersPage from "../features/branchManager/pages/CustomersPage";
 import RatingsPage from "../features/branchManager/pages/RatingsPage";
-import ReportsPage from "../features/branchManager/pages/ReportsPage";
+import MedicalHistoryPage from "../features/branchManager/pages/MedicalHistoryPage";
 
 const ManagerRoutes = () => {
   return (
     <Routes>
       <Route path="/" element={<ManagerLayout />}>
+        {/* Dashboard - Trang chủ */}
         <Route index element={<DashboardPage />} />
-        <Route path="dashboard" element={<DashboardPage />} />
-        <Route path="staff" element={<StaffPage />} />
+
+        {/* Doanh thu */}
+        <Route path="revenue" element={<RevenuePage />} />
+
+        {/* Tiêm phòng */}
+        <Route path="vaccination" element={<VaccinationPage />} />
+
+        {/* Tồn kho */}
         <Route path="inventory" element={<InventoryPage />} />
+
+        {/* Lịch hẹn */}
         <Route path="appointments" element={<AppointmentsPage />} />
-        <Route path="services" element={<ServicesPage />} />
+
+        {/* Nhân viên */}
+        <Route path="staff" element={<StaffPage />} />
+
+        {/* Khách hàng */}
+        <Route path="customers" element={<CustomersPage />} />
+
+        {/* Đánh giá */}
         <Route path="ratings" element={<RatingsPage />} />
-        <Route path="reports" element={<ReportsPage />} />
+
+        {/* Hồ sơ bệnh án */}
+        <Route path="medical-history" element={<MedicalHistoryPage />} />
+
+        {/* Redirect any unknown routes to dashboard */}
+        <Route path="*" element={<Navigate to="/branch-manager" replace />} />
       </Route>
     </Routes>
   );

@@ -1,78 +1,112 @@
+// backend/src/routes/branchManagerRoutes.js
+
 const express = require("express");
 const router = express.Router();
 const branchManagerController = require("../controllers/branchManagerController");
 
-// ==================== DASHBOARD ====================
-/**
- * GET /api/branch-manager/summary
- * Lấy tổng quan dashboard: doanh thu hôm nay, nhân viên, hàng tồn kho
- */
-router.get("/summary", branchManagerController.getSummary);
+// ============================================
+// 1. DASHBOARD
+// ============================================
 
-// ==================== STAFF ====================
-/**
- * GET /api/branch-manager/staff
- * Lấy danh sách nhân viên đang làm việc tại chi nhánh
- */
-router.get("/staff", branchManagerController.listStaff);
+// 📊 Dashboard Summary
+router.get("/dashboard/summary", branchManagerController.getDashboardSummary);
 
-/**
- * POST /api/branch-manager/assignments
- * Gán nhân viên vào chi nhánh
- */
-router.post("/assignments", branchManagerController.createAssignment);
+// 📈 Revenue Chart
+router.get("/dashboard/revenue-chart", branchManagerController.getRevenueChart);
 
-/**
- * PATCH /api/branch-manager/assignments/:id/end
- * Kết thúc gán việc của nhân viên
- */
-router.patch("/assignments/:id/end", branchManagerController.endAssignment);
+// 🔔 Urgent Alerts
+router.get("/dashboard/alerts", branchManagerController.getUrgentAlerts);
 
-// ==================== INVENTORY ====================
-/**
- * GET /api/branch-manager/inventory
- * Lấy danh sách hàng tồn kho theo chi nhánh
- */
-router.get("/inventory", branchManagerController.listInventory);
+// ============================================
+// 2. DOANH THU - REVENUE
+// ============================================
 
-/**
- * PATCH /api/branch-manager/inventory
- * Cập nhật số lượng và giá bán sản phẩm
- */
-router.patch("/inventory", branchManagerController.updateInventory);
+// 💰 Doanh thu theo kỳ (tháng/quý/năm)
+router.get("/revenue/by-period", branchManagerController.getRevenueByPeriod);
 
-// ==================== SERVICES ====================
-/**
- * GET /api/branch-manager/services
- * Lấy danh sách dịch vụ tại chi nhánh
- */
-router.get("/services", branchManagerController.listServices);
+// 👨‍⚕️ Doanh thu theo bác sĩ
+router.get("/revenue/by-doctor", branchManagerController.getRevenueByDoctor);
 
-/**
- * PATCH /api/branch-manager/services
- * Cập nhật giá dịch vụ và trạng thái
- */
-router.patch("/services", branchManagerController.updateService);
+// 📦 Doanh thu bán sản phẩm
+router.get("/revenue/product-sales", branchManagerController.getProductSales);
 
-// ==================== APPOINTMENTS ====================
-/**
- * GET /api/branch-manager/appointments
- * Lấy danh sách lịch hẹn theo khoảng thời gian
- */
-router.get("/appointments", branchManagerController.listAppointments);
+// ============================================
+// 3. TIÊM PHÒNG - VACCINATION
+// ============================================
 
-// ==================== RATINGS ====================
-/**
- * GET /api/branch-manager/ratings
- * Lấy đánh giá của khách hàng
- */
-router.get("/ratings", branchManagerController.listRatings);
+// 💉 Danh sách thú cưng đã tiêm phòng
+router.get("/vaccination/pets", branchManagerController.getVaccinatedPets);
 
-// ==================== REPORTS ====================
-/**
- * GET /api/branch-manager/revenue
- * Báo cáo doanh thu theo ngày
- */
-router.get("/revenue", branchManagerController.revenueReport);
+// 🏆 Top vaccines được sử dụng nhiều nhất
+router.get("/vaccination/top-vaccines", branchManagerController.getTopVaccines);
+
+// 🔍 Tra cứu vaccine
+router.get("/vaccination/search", branchManagerController.searchVaccines);
+
+// ============================================
+// 4. TỒN KHO - INVENTORY
+// ============================================
+
+// 📦 Danh sách tồn kho
+router.get("/inventory", branchManagerController.getInventory);
+
+// 📝 Cập nhật tồn kho
+router.put("/inventory/update", branchManagerController.updateInventory);
+
+// ============================================
+// 5. LỊCH HẸN - APPOINTMENTS
+// ============================================
+
+// 📅 Danh sách lịch hẹn
+router.get("/appointments", branchManagerController.getAppointments);
+
+// 📊 Thống kê khám bệnh
+router.get("/appointments/statistics", branchManagerController.getExamStatistics);
+
+// ============================================
+// 6. NHÂN VIÊN - STAFF
+// ============================================
+
+// 👥 Danh sách nhân viên chi nhánh
+router.get("/staff", branchManagerController.getBranchStaff);
+
+// 📈 Hiệu suất nhân viên
+router.get("/staff/performance", branchManagerController.getStaffPerformance);
+
+// ============================================
+// 7. KHÁCH HÀNG - CUSTOMERS
+// ============================================
+
+// 📊 Thống kê khách hàng
+router.get("/customers/statistics", branchManagerController.getCustomerStatistics);
+
+// ============================================
+// 8. ĐÁNH GIÁ - RATINGS
+// ============================================
+
+// ⭐ Danh sách đánh giá
+router.get("/ratings", branchManagerController.getRatings);
+
+// ============================================
+// 9. HỒ SƠ BỆNH ÁN - MEDICAL HISTORY
+// ============================================
+
+// 🔍 Tìm kiếm thú cưng
+router.get("/medical/search-pets", branchManagerController.searchPets);
+
+// 📋 Hồ sơ bệnh án thú cưng
+router.get("/medical/pet-history", branchManagerController.getPetMedicalHistory);
+
+// ============================================
+// TEST ROUTE
+// ============================================
+
+router.get("/test", (req, res) => {
+  res.status(200).json({
+    success: true,
+    message: "Branch Manager API is working! ✅",
+    timestamp: new Date().toISOString(),
+  });
+});
 
 module.exports = router;

@@ -1,80 +1,75 @@
-import React, { useEffect, useMemo, useState } from "react";
-import { Card } from "../../../shared/components/ui/Card";
-import Button from "../../../shared/components/ui/Button";
-import { branchManagerApi } from "../../../api/branchManagerApi";
-import { RefreshCw, Package, AlertTriangle, XCircle, DollarSign } from "lucide-react";
+// frontend/src/features/branchManager/pages/InventoryPage.jsx
 
-function getDefaultBranchId() {
-  const v = localStorage.getItem("branchId");
-  return v ? Number(v) : 1;
-}
+import React, { useState, useEffect } from "react";
+import branchManagerApi from "../../../api/branchManagerApi";
+import { Package, Search, AlertCircle, Edit, Save, X, RefreshCw } from "lucide-react";
 
-export default function InventoryPage() {
-  const [branchId, setBranchId] = useState(getDefaultBranchId());
-  const [items, setItems] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
+const InventoryPage = () => {
+  const branchId = 10;
+  const [inventory, setInventory] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [editingItem, setEditingItem] = useState(null);
+  const [editQty, setEditQty] = useState("");
 
-  // ==================== STATS ====================
-  const stats = useMemo(() => {
-    const totalProducts = items.length;
-    const lowStock = items.filter((x) => Number(x.StockQty) < 10 && x.IsActive).length;
-    const outStock = items.filter((x) => Number(x.StockQty) === 0 && x.IsActive).length;
-    const totalValue = items.reduce((acc, x) => acc + Number(x.StockQty || 0) * Number(x.SellingPrice || 0), 0);
-    return { totalProducts, lowStock, outStock, totalValue };
-  }, [items]);
+  useEffect(() => {
+    fetchInventory();
+  }, []);
 
-  // ==================== LOAD DATA ====================
-  async function load() {
+  const fetchInventory = async () => {
     try {
       setLoading(true);
-      setError("");
-      const res = await branchManagerApi.listInventory(branchId);
-      setItems(res.data?.data?.items || []);
-    } catch (e) {
-      setError(e.response?.data?.message || e.message);
+      const res = await branchManagerApi.getInventory(branchId);
+      setInventory(res.data.inventory || []);
+    } catch (error) {
+      console.error("Error fetching inventory:", error);
     } finally {
       setLoading(false);
     }
-  }
+  };
 
-  useEffect(() => {
-    load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  function saveBranch() {
-    localStorage.setItem("branchId", String(branchId));
-    load();
-  }
-
-  // ==================== UPDATE ROW ====================
-  function setRow(idx, patch) {
-    setItems((prev) => prev.map((x, i) => (i === idx ? { ...x, ...patch } : x)));
-  }
-
-  async function saveRow(row) {
+  const handleSave = async (productId) => {
     try {
-      setError("");
       await branchManagerApi.updateInventory({
         branchId,
-        productId: row.ProductID,
-        stockQty: Number(row.StockQty),
-        sellingPrice: Number(row.SellingPrice),
-        isActive: !!row.IsActive,
+        productId,
+        stockQty: parseInt(editQty),
       });
-      load();
-    } catch (e) {
-      setError(e.response?.data?.message || e.message);
+      alert("Cập nhật tồn kho thành công!");
+      setEditingItem(null);
+      fetchInventory();
+    } catch (error) {
+      console.error("Error updating inventory:", error);
+      alert("Có lỗi xảy ra!");
     }
-  }
+  };
 
-  // ==================== STATUS HELPER ====================
-  const getStatus = (x) => {
-    if (!x.IsActive) return { label: "Inactive", cls: "bg-neutral-100 text-neutral-700" };
-    if (Number(x.StockQty) === 0) return { label: "Out of Stock", cls: "bg-danger-100 text-danger-700" };
-    if (Number(x.StockQty) < 10) return { label: "Low Stock", cls: "bg-warning-100 text-warning-700" };
-    return { label: "In Stock", cls: "bg-success-100 text-success-700" };
+  const getStockBadge = (status) => {
+    const config = {
+      out_of_stock: { bg: "bg-red-100", text: "text-red-800", label: "Hết hàng" },
+      low_stock: { bg: "bg-amber-100", text: "text-amber-800", label: "Sắp hết" },
+      in_stock: { bg: "bg-emerald-100", text: "text-emerald-800", label: "Còn hàng" },
+    };
+    const c = config[status] || config.in_stock;
+    return <span className={`${c.bg} ${c.text} px-3 py-1 rounded-full text-sm font-medium`}>{c.label}</span>;
+  };
+
+  const formatCurrency = (value) => {
+    return new Intl.NumberFormat("vi-VN", {
+      style: "currency",
+      currency: "VND",
+      maximumFractionDigits: 0,
+    }).format(value || 0);
+  };
+
+  const filteredInventory = inventory.filter((item) =>
+    item.ProductName.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  const stats = {
+    inStock: inventory.filter((i) => i.stockStatus === "in_stock").length,
+    lowStock: inventory.filter((i) => i.stockStatus === "low_stock").length,
+    outOfStock: inventory.filter((i) => i.stockStatus === "out_of_stock").length,
   };
 
   return (
@@ -82,196 +77,152 @@ export default function InventoryPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-neutral-900">Inventory Management</h1>
-          <p className="text-sm text-neutral-600 mt-1">Track and manage stock per branch.</p>
+          <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-3">
+            <Package className="w-8 h-8 text-amber-600" />
+            Quản lý Tồn kho
+          </h1>
+          <p className="text-gray-600 mt-1">Theo dõi và cập nhật hàng tồn kho</p>
         </div>
-
-        <Button onClick={load} variant="outline" disabled={loading}>
-          <RefreshCw className={`w-4 h-4 mr-2 ${loading ? "animate-spin" : ""}`} />
-          Refresh
-        </Button>
+        <button
+          onClick={fetchInventory}
+          className="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2"
+        >
+          <RefreshCw className="w-5 h-5" />
+          Làm mới
+        </button>
       </div>
 
-      {/* Error Alert */}
-      {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg">
-          <strong className="font-medium">Error: </strong>
-          <span>{error}</span>
+      {/* Stats Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="bg-gradient-to-br from-emerald-500 to-emerald-600 rounded-xl p-6 text-white shadow-lg">
+          <div className="flex items-center gap-4">
+            <Package className="w-12 h-12 opacity-80" />
+            <div>
+              <div className="text-3xl font-bold">{stats.inStock}</div>
+              <div className="text-sm opacity-90">Còn hàng</div>
+            </div>
+          </div>
         </div>
-      )}
-
-      {/* Testing Controls - Collapsible */}
-      <details className="bg-neutral-50 border border-neutral-200 rounded-lg p-4">
-        <summary className="cursor-pointer font-medium text-neutral-700 text-sm">
-          🔧 Testing Controls (Click to expand)
-        </summary>
-        <div className="flex gap-4 items-end mt-4">
-          <div className="flex-1">
-            <label className="block text-sm font-medium text-neutral-700 mb-1">Branch ID (for testing)</label>
-            <input
-              type="number"
-              value={branchId}
-              onChange={(e) => setBranchId(Number(e.target.value))}
-              className="w-full px-3 py-2 border border-neutral-300 rounded-lg"
-            />
+        <div className="bg-gradient-to-br from-amber-500 to-amber-600 rounded-xl p-6 text-white shadow-lg">
+          <div className="flex items-center gap-4">
+            <AlertCircle className="w-12 h-12 opacity-80" />
+            <div>
+              <div className="text-3xl font-bold">{stats.lowStock}</div>
+              <div className="text-sm opacity-90">Sắp hết</div>
+            </div>
           </div>
-          <Button onClick={saveBranch} variant="primary">
-            Load Data
-          </Button>
         </div>
-        <div className="mt-2 text-xs text-neutral-600 bg-blue-50 p-2 rounded border border-blue-200">
-          💡 <strong>Tip:</strong> Change Branch ID to test different branches (1, 2, 3, etc.)
+        <div className="bg-gradient-to-br from-red-500 to-red-600 rounded-xl p-6 text-white shadow-lg">
+          <div className="flex items-center gap-4">
+            <AlertCircle className="w-12 h-12 opacity-80" />
+            <div>
+              <div className="text-3xl font-bold">{stats.outOfStock}</div>
+              <div className="text-sm opacity-90">Hết hàng</div>
+            </div>
+          </div>
         </div>
-      </details>
-
-      {/* Stats Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card className="p-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-neutral-600">Total Products</p>
-              <p className="text-2xl font-bold text-neutral-900 mt-1">{stats.totalProducts}</p>
-            </div>
-            <div className="p-3 rounded-lg bg-blue-50 text-blue-600">
-              <Package className="w-6 h-6" />
-            </div>
-          </div>
-        </Card>
-
-        <Card className="p-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-neutral-600">Low Stock</p>
-              <p className="text-2xl font-bold text-yellow-600 mt-1">{stats.lowStock}</p>
-            </div>
-            <div className="p-3 rounded-lg bg-yellow-50 text-yellow-600">
-              <AlertTriangle className="w-6 h-6" />
-            </div>
-          </div>
-        </Card>
-
-        <Card className="p-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-neutral-600">Out of Stock</p>
-              <p className="text-2xl font-bold text-red-600 mt-1">{stats.outStock}</p>
-            </div>
-            <div className="p-3 rounded-lg bg-red-50 text-red-600">
-              <XCircle className="w-6 h-6" />
-            </div>
-          </div>
-        </Card>
-
-        <Card className="p-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-neutral-600">Total Value</p>
-              <p className="text-2xl font-bold text-green-600 mt-1">{(stats.totalValue / 1000000).toFixed(1)}M</p>
-            </div>
-            <div className="p-3 rounded-lg bg-green-50 text-green-600">
-              <DollarSign className="w-6 h-6" />
-            </div>
-          </div>
-        </Card>
       </div>
 
-      {/* Info Alert */}
-      <div className="bg-blue-50 border border-blue-200 text-blue-700 px-4 py-3 rounded-lg text-sm">
-        ℹ️ Low stock threshold is &lt; 10 units. Items marked as "Inactive" won't appear in sales.
+      {/* Search */}
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+          <input
+            type="text"
+            placeholder="Tìm kiếm sản phẩm..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500"
+          />
+        </div>
       </div>
 
       {/* Inventory Table */}
-      <Card>
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-neutral-200 bg-neutral-50">
-                <th className="px-4 py-3 text-left text-xs font-medium text-neutral-700 uppercase">Product</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-neutral-700 uppercase">Type</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-neutral-700 uppercase">Stock</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-neutral-700 uppercase">Selling Price</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-neutral-700 uppercase">Status</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-neutral-700 uppercase">Active</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-neutral-700 uppercase">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-neutral-200">
-              {loading ? (
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100">
+        <div className="p-6 border-b border-gray-200">
+          <h2 className="text-xl font-semibold">Danh sách tồn kho ({filteredInventory.length})</h2>
+        </div>
+
+        {loading ? (
+          <div className="p-12 text-center">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-amber-600 mx-auto"></div>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-gray-50 border-b">
                 <tr>
-                  <td colSpan={7} className="px-4 py-8 text-center text-neutral-500">
-                    <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2" />
-                    Loading inventory...
-                  </td>
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Sản phẩm</th>
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Loại</th>
+                  <th className="px-6 py-3 text-center text-xs font-semibold text-gray-700 uppercase">Số lượng</th>
+                  <th className="px-6 py-3 text-right text-xs font-semibold text-gray-700 uppercase">Giá bán</th>
+                  <th className="px-6 py-3 text-center text-xs font-semibold text-gray-700 uppercase">Trạng thái</th>
+                  <th className="px-6 py-3 text-center text-xs font-semibold text-gray-700 uppercase">Thao tác</th>
                 </tr>
-              ) : items.length === 0 ? (
-                <tr>
-                  <td colSpan={7} className="px-4 py-8 text-center text-neutral-500">
-                    No inventory items found for this branch.
-                  </td>
-                </tr>
-              ) : (
-                items.map((item, idx) => {
-                  const st = getStatus(item);
+              </thead>
+              <tbody className="divide-y divide-gray-200">
+                {filteredInventory.map((item) => {
+                  const isEditing = editingItem === item.ProductID;
                   return (
-                    <tr key={item.ProductID} className="hover:bg-neutral-50 transition-colors">
-                      <td className="px-4 py-3">
-                        <div className="text-sm font-medium text-neutral-900">{item.ProductName}</div>
-                        <div className="text-xs text-neutral-500">#{item.ProductID}</div>
+                    <tr key={item.ProductID} className="hover:bg-gray-50">
+                      <td className="px-6 py-4 font-medium text-gray-900">{item.ProductName}</td>
+                      <td className="px-6 py-4 text-sm text-gray-600">{item.ProductType}</td>
+                      <td className="px-6 py-4 text-center">
+                        {isEditing ? (
+                          <input
+                            type="number"
+                            value={editQty}
+                            onChange={(e) => setEditQty(e.target.value)}
+                            className="w-24 px-3 py-1 border border-gray-300 rounded text-center focus:ring-2 focus:ring-amber-500"
+                          />
+                        ) : (
+                          <span className="text-lg font-bold text-gray-900">
+                            {item.StockQty} {item.Unit}
+                          </span>
+                        )}
                       </td>
-                      <td className="px-4 py-3">
-                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-neutral-100 text-neutral-700">
-                          {item.ProductType}
-                        </span>
+                      <td className="px-6 py-4 text-right font-medium text-gray-900">
+                        {formatCurrency(item.SellingPrice)}
                       </td>
-                      <td className="px-4 py-3">
-                        <input
-                          type="number"
-                          value={item.StockQty}
-                          onChange={(e) => setRow(idx, { StockQty: e.target.value })}
-                          className="w-20 px-2 py-1 border border-neutral-300 rounded text-sm"
-                        />
-                      </td>
-                      <td className="px-4 py-3">
-                        <input
-                          type="number"
-                          value={item.SellingPrice}
-                          onChange={(e) => setRow(idx, { SellingPrice: e.target.value })}
-                          className="w-28 px-2 py-1 border border-neutral-300 rounded text-sm"
-                        />
-                      </td>
-                      <td className="px-4 py-3">
-                        <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${st.cls}`}>
-                          {st.label}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3">
-                        <input
-                          type="checkbox"
-                          checked={item.IsActive}
-                          onChange={(e) => setRow(idx, { IsActive: e.target.checked })}
-                          className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
-                        />
-                      </td>
-                      <td className="px-4 py-3">
-                        <Button variant="primary" size="sm" onClick={() => saveRow(item)}>
-                          Save
-                        </Button>
+                      <td className="px-6 py-4 text-center">{getStockBadge(item.stockStatus)}</td>
+                      <td className="px-6 py-4 text-center">
+                        {isEditing ? (
+                          <div className="flex items-center justify-center gap-2">
+                            <button
+                              onClick={() => handleSave(item.ProductID)}
+                              className="p-2 text-emerald-600 hover:bg-emerald-50 rounded-lg"
+                            >
+                              <Save className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => setEditingItem(null)}
+                              className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg"
+                            >
+                              <X className="w-4 h-4" />
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            onClick={() => {
+                              setEditingItem(item.ProductID);
+                              setEditQty(item.StockQty);
+                            }}
+                            className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg"
+                          >
+                            <Edit className="w-4 h-4" />
+                          </button>
+                        )}
                       </td>
                     </tr>
                   );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
-
-        {/* Footer */}
-        {!loading && items.length > 0 && (
-          <div className="px-4 py-3 border-t border-neutral-200 bg-neutral-50 text-sm text-neutral-600">
-            Total: {items.length} products | Low Stock: {stats.lowStock} | Out of Stock: {stats.outStock}
+                })}
+              </tbody>
+            </table>
           </div>
         )}
-      </Card>
+      </div>
     </div>
   );
-}
+};
+
+export default InventoryPage;

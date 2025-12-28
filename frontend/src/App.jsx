@@ -1,4 +1,5 @@
-// src/App.jsx
+// frontend/src/App.jsx
+
 import React from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 
@@ -19,16 +20,16 @@ function App() {
     <BrowserRouter>
       <Routes>
         {/* Customer Routes */}
-        <Route path="/customer" element={<CustomerLayout />}>
+        <Route path="/" element={<CustomerLayout />}>
           <Route index element={<CustomerHomePage />} />
           <Route path="profile" element={<CustomerProfilePage />} />
-          <Route path="pets" element={<div className="p-8">My Pets Coming Soon</div>} />
-          <Route path="appointments" element={<div className="p-8">Appointments Coming Soon</div>} />
-          <Route path="billing" element={<div className="p-8">Billing Coming Soon</div>} />
+          <Route path="my-pets" element={<div>My Pets Coming Soon</div>} />
+          <Route path="appointments" element={<div>Appointments Coming Soon</div>} />
+          <Route path="billing" element={<div>Billing Coming Soon</div>} />
         </Route>
 
         {/* Branch Manager Routes */}
-        <Route path="/manager/*" element={<ManagerRoutes />} />
+        <Route path="/branch-manager/*" element={<ManagerRoutes />} />
 
         {/* Receptionist Routes */}
         <Route path="/receptionist/*" element={<ReceptionistRoutes />} />
@@ -43,7 +44,7 @@ function App() {
         <Route path="/admin/*" element={<AdminRoutes />} />
 
         {/* Default redirect */}
-        <Route path="/" element={<Navigate to="/customer" replace />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>
   );
