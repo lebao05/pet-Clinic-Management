@@ -142,7 +142,7 @@ const DoctorSchedulePage = () => {
           {pets.map((p) => (
             <button key={p.petId} className={`p-3 border rounded text-left ${selectedPet?.petId === p.petId ? 'bg-slate-50' : 'bg-white'}`} onClick={() => loadHistory(p)}>
               <div className="font-medium">{p.name} {p.breed ? `• ${p.breed}` : ''}</div>
-              <div className="text-xs text-neutral-500">Owner: {p.owner?.fullName} • {p.owner?.phone}</div>
+              <div className="text-xs text-neutral-500">ID: {p.petId} • Owner: {p.owner?.fullName} • {p.owner?.phone}</div>
               <div className="text-xs mt-1">{p.hasHistory ? 'Returning' : 'First-time'}</div>
             </button>
           ))}
@@ -151,7 +151,7 @@ const DoctorSchedulePage = () => {
 
       {selectedPet && (
         <Card className="p-4">
-          <h2 className="text-lg font-semibold">{selectedPet.name} — History</h2>
+    <h2 className="text-lg font-semibold">{selectedPet.name} — ID #{selectedPet.petId} — History</h2>
           <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <h3 className="font-medium">Exam records</h3>

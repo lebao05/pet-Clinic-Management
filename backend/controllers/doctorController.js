@@ -119,12 +119,28 @@ const DoctorController = {
   // Simple product search used as medicines lookup
   async searchMedicines(req, res, next) {
     try {
-      const q = (req.query.query || req.query.q || "").toString();
+      // New behavior: search by exact ProductID when `id` is provided.
+      // If `id` missing, return all medicines.
+      const idRaw = req.query.id || req.query.productId || null;
       const pool = await getConnection();
+
+      if (idRaw) {
+        const id = Number(idRaw);
+        if (Number.isNaN(id)) return res.status(400).json({ message: "Invalid id" });
+        const result = await pool
+          .request()
+          .input("ProductID", sql.Int, id)
+          .query(`SELECT ProductID, ProductName, Unit, ProductType FROM dbo.Product WHERE ProductID = @ProductID AND UPPER(ProductType) = 'MEDICINE';`);
+
+        const rows = result.recordset.map((r) => ({ productId: r.ProductID, name: r.ProductName, unit: r.Unit, type: r.ProductType }));
+        // Return as array (single item) to keep frontend handling consistent
+        return res.json(rows);
+      }
+
+      // No id provided -> return all medicines
       const result = await pool
         .request()
-        .input("Q", sql.NVarChar(200), likeQuery(q))
-        .query(`SELECT TOP (50) ProductID, ProductName, Unit, ProductType FROM dbo.Product WHERE ProductName LIKE @Q AND UPPER(ProductType) = 'MEDICINE' ORDER BY ProductName ASC`);
+        .query(`SELECT ProductID, ProductName, Unit, ProductType FROM dbo.Product WHERE UPPER(ProductType) = 'MEDICINE' ORDER BY ProductName ASC;`);
 
       return res.json(result.recordset.map((r) => ({ productId: r.ProductID, name: r.ProductName, unit: r.Unit, type: r.ProductType })));
     } catch (err) {
@@ -135,7 +151,22 @@ const DoctorController = {
   // List available vaccines for catalog
   async listVaccines(req, res, next) {
     try {
+      // Support query param `id` to fetch a single vaccine by VaccineID.
+      const idRaw = req.query.id || req.query.vaccineId || null;
       const pool = await getConnection();
+
+      if (idRaw) {
+        const id = Number(idRaw);
+        if (Number.isNaN(id)) return res.status(400).json({ message: "Invalid id" });
+        const result = await pool
+          .request()
+          .input("VaccineID", sql.Int, id)
+          .query(`SELECT VaccineID, VaccineName, Manufacturer, DefaultDose, DefaultPrice FROM dbo.Vaccine WHERE VaccineID = @VaccineID AND IsActive = 1;`);
+
+        // Return as array (single item) to keep frontend handling consistent
+        return res.json(result.recordset.map(r => ({ VaccineID: r.VaccineID, VaccineName: r.VaccineName, Manufacturer: r.Manufacturer, DefaultDose: r.DefaultDose, DefaultPrice: r.DefaultPrice })));
+      }
+
       const result = await pool
         .request()
         .query(`SELECT VaccineID, VaccineName, Manufacturer, DefaultDose, DefaultPrice FROM dbo.Vaccine WHERE IsActive = 1 ORDER BY VaccineName ASC`);

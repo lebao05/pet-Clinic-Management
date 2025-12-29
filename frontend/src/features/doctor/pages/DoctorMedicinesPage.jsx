@@ -10,12 +10,15 @@ const DoctorMedicinesPage = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
+  // Now search by exact Product ID when provided. If empty -> return all medicines.
   const search = async (e) => {
     if (e) e.preventDefault();
     setError("");
     setLoading(true);
     try {
-      const res = await axiosClient.get("/doctor/medicines", { params: { query } });
+      const params = {};
+      if (query.toString().trim()) params.id = query.toString().trim();
+      const res = await axiosClient.get("/doctor/medicines", { params });
       setMeds(Array.isArray(res.data) ? res.data : []);
     } catch (err) {
       setError(err.response?.data?.message || "Failed to search medicines");
@@ -33,7 +36,7 @@ const DoctorMedicinesPage = () => {
 
       <Card className="p-4">
         <form onSubmit={search} className="flex gap-2">
-          <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search medicine name" />
+          <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Enter medicine ID (leave empty to list all)" />
           <Button type="submit" variant="dark" disabled={loading}>{loading ? 'Searching...' : 'Search'}</Button>
         </form>
         {error && <div className="mt-2 text-danger-600">{error}</div>}

@@ -28,7 +28,7 @@ const DoctorLayout = () => {
       <Sidebar logo="🐾" title="PetCareX" subtitle="" menuItems={menuItems} footer={roleSwitcher} />
 
       <div className="flex-1 ml-60 flex flex-col overflow-hidden">
-        <Navbar searchPlaceholder="Search appointments, patients..." user={user} showNotifications={true} />
+  <Navbar title="Doctor" user={user} showNotifications={true} />
 
         <main className="flex-1 overflow-y-auto p-6">
           <Outlet />

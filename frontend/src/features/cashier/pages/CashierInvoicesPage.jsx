@@ -115,7 +115,7 @@ const CashierInvoicesPage = () => {
                   <TableCell className="text-right">{r.finalAmount}</TableCell>
                   <TableCell>{r.paymentStatus}</TableCell>
                   <TableCell className="text-right">
-                    <Button variant="outline" size="sm" onClick={() => navigate(`/cashier/invoices/${r.invoiceId}`)}>
+                    <Button variant="dark" size="sm" onClick={() => navigate(`/cashier/invoices/${r.invoiceId}`)}>
                       View
                     </Button>
                   </TableCell>

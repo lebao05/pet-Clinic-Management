@@ -43,32 +43,12 @@ const DoctorVaccineCatalogPage = () => {
 
   // Filters
   const [filters, setFilters] = useState({
-    name: "",
-    type: "",
-    manufacturer: "",
-    mfgFrom: "",
-    mfgTo: "",
-    expFrom: "",
-    expTo: "",
-    branchId: "",
-    inStock: "all", // all | in | out
+    id: "",
   });
 
   const params = useMemo(() => {
     const p = {};
-    if (filters.name.trim()) p.name = filters.name.trim();
-    if (filters.type.trim()) p.type = filters.type.trim();
-    if (filters.manufacturer.trim()) p.manufacturer = filters.manufacturer.trim();
-
-    if (filters.mfgFrom) p.mfgFrom = filters.mfgFrom;
-    if (filters.mfgTo) p.mfgTo = filters.mfgTo;
-    if (filters.expFrom) p.expFrom = filters.expFrom;
-    if (filters.expTo) p.expTo = filters.expTo;
-
-    if (filters.branchId.trim()) p.branchId = Number(filters.branchId);
-
-    if (filters.inStock === "in") p.inStock = 1;
-    if (filters.inStock === "out") p.inStock = 0;
+    if (filters.id.toString().trim()) p.id = filters.id.toString().trim();
 
     return p;
   }, [filters]);
@@ -96,18 +76,7 @@ const DoctorVaccineCatalogPage = () => {
   const onApply = () => load(params);
 
   const onClear = () => {
-    const cleared = {
-      name: "",
-      type: "",
-      manufacturer: "",
-      mfgFrom: "",
-      mfgTo: "",
-      expFrom: "",
-      expTo: "",
-      branchId: "",
-      inStock: "all",
-    };
-    setFilters(cleared);
+    setFilters({ id: "" });
     load({}); // load all
   };
 
@@ -116,7 +85,7 @@ const DoctorVaccineCatalogPage = () => {
       <div className="flex items-center justify-between gap-3">
         <h1 className="text-2xl font-semibold text-neutral-900">Vaccine Catalog</h1>
         <div className="flex items-center gap-2">
-          <Button onClick={() => load(params)} disabled={loading}>
+          <Button variant="dark" onClick={() => load(params)} disabled={loading}>
             {loading ? "Loading..." : "Refresh"}
           </Button>
         </div>
@@ -127,110 +96,27 @@ const DoctorVaccineCatalogPage = () => {
       {/* Filters */}
       <Card className="p-5">
         <div className="flex items-center justify-between mb-4">
-          <div className="text-sm font-semibold text-neutral-900">Filters</div>
+          <div className="text-sm font-semibold text-neutral-900">Filter by ID</div>
           <div className="flex gap-2">
-            <Button onClick={onApply} disabled={loading}>
+            <Button onClick={onApply} disabled={loading} variant="dark">
               Apply
             </Button>
-            <Button onClick={onClear} disabled={loading} variant="outline">
+            <Button onClick={onClear} disabled={loading} variant="dark">
               Clear
             </Button>
           </div>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="space-y-1">
-            <div className={labelCls}>Name</div>
+          <div className="space-y-1 md:col-span-1">
+            <div className={labelCls}>ID</div>
             <input
               className={inputCls}
-              value={filters.name}
-              onChange={(e) => setFilters((s) => ({ ...s, name: e.target.value }))}
-              placeholder="e.g. Rabies"
-            />
-          </div>
-
-          <div className="space-y-1">
-            <div className={labelCls}>Type</div>
-            <input
-              className={inputCls}
-              value={filters.type}
-              onChange={(e) => setFilters((s) => ({ ...s, type: e.target.value }))}
-              placeholder="e.g. Core / Non-core"
-            />
-          </div>
-
-          <div className="space-y-1">
-            <div className={labelCls}>Manufacturer</div>
-            <input
-              className={inputCls}
-              value={filters.manufacturer}
-              onChange={(e) => setFilters((s) => ({ ...s, manufacturer: e.target.value }))}
-              placeholder="e.g. MSD"
-            />
-          </div>
-
-          <div className="space-y-1">
-            <div className={labelCls}>Manufacture Date (From)</div>
-            <input
-              type="date"
-              className={inputCls}
-              value={filters.mfgFrom}
-              onChange={(e) => setFilters((s) => ({ ...s, mfgFrom: e.target.value }))}
-            />
-          </div>
-
-          <div className="space-y-1">
-            <div className={labelCls}>Manufacture Date (To)</div>
-            <input
-              type="date"
-              className={inputCls}
-              value={filters.mfgTo}
-              onChange={(e) => setFilters((s) => ({ ...s, mfgTo: e.target.value }))}
-            />
-          </div>
-
-          <div className="space-y-1">
-            <div className={labelCls}>Branch ID (for stock)</div>
-            <input
-              className={inputCls}
-              value={filters.branchId}
-              onChange={(e) => setFilters((s) => ({ ...s, branchId: e.target.value }))}
+              value={filters.id}
+              onChange={(e) => setFilters({ id: e.target.value })}
               placeholder="e.g. 1"
               inputMode="numeric"
             />
-          </div>
-
-          <div className="space-y-1">
-            <div className={labelCls}>Expiry Date (From)</div>
-            <input
-              type="date"
-              className={inputCls}
-              value={filters.expFrom}
-              onChange={(e) => setFilters((s) => ({ ...s, expFrom: e.target.value }))}
-            />
-          </div>
-
-          <div className="space-y-1">
-            <div className={labelCls}>Expiry Date (To)</div>
-            <input
-              type="date"
-              className={inputCls}
-              value={filters.expTo}
-              onChange={(e) => setFilters((s) => ({ ...s, expTo: e.target.value }))}
-            />
-          </div>
-
-          <div className="space-y-1">
-            <div className={labelCls}>Stock Status</div>
-            <select
-              className={inputCls}
-              value={filters.inStock}
-              onChange={(e) => setFilters((s) => ({ ...s, inStock: e.target.value }))}
-            >
-              <option value="all">All</option>
-              <option value="in">In stock</option>
-              <option value="out">Out of stock</option>
-            </select>
           </div>
         </div>
       </Card>

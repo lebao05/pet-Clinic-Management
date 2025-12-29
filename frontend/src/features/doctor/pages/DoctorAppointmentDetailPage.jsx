@@ -116,7 +116,7 @@ const DoctorAppointmentDetailPage = () => {
       <Card className="p-6">
         <div className="text-danger-600">{error || "Not found"}</div>
         <div className="mt-4">
-          <Button variant="outline" onClick={() => navigate(-1)}>
+          <Button variant="dark" onClick={() => navigate(-1)}>
             Back
           </Button>
         </div>

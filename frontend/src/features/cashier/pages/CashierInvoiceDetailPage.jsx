@@ -44,7 +44,7 @@ const CashierInvoiceDetailPage = () => {
       <Card className="p-6">
         <div className="text-danger-600">{error || "Not found"}</div>
         <div className="mt-4">
-          <Button variant="outline" onClick={() => navigate(-1)}>
+          <Button variant="dark" onClick={() => navigate(-1)}>
             Back
           </Button>
         </div>
@@ -60,10 +60,10 @@ const CashierInvoiceDetailPage = () => {
           <div className="text-sm text-neutral-600">{new Date(data.invoiceDate).toLocaleString()}</div>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" onClick={() => navigate(-1)}>
+          <Button variant="dark" onClick={() => navigate(-1)}>
             Back
           </Button>
-          <Button onClick={load}>Refresh</Button>
+          <Button variant="dark" onClick={load}>Refresh</Button>
         </div>
       </div>
 

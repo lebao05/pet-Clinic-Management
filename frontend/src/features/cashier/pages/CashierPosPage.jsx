@@ -119,7 +119,7 @@ const CashierPosPage = () => {
           {checkedPet ? (
             <div key={checkedPet.petId} className="p-3 border rounded bg-white">
               <div className="font-medium">{checkedPet.name} {checkedPet.breed ? `• ${checkedPet.breed}` : ''}</div>
-              <div className="text-xs text-neutral-500">Owner: {checkedPet.owner?.fullName} • {checkedPet.owner?.phone}</div>
+              <div className="text-xs text-neutral-500">ID: {checkedPet.petId} • Owner: {checkedPet.owner?.fullName} • {checkedPet.owner?.phone}</div>
               <div className="text-xs mt-1">{checkedPet.hasHistory ? 'Returning' : 'First-time'}</div>
               {!checkedPet.isOwnerMatch && <div className="text-xs text-danger-600 mt-1">Warning: provided UserID does not match pet owner.</div>}
             </div>
@@ -127,7 +127,7 @@ const CashierPosPage = () => {
             pets.map((p) => (
               <div key={p.petId} className="p-3 border rounded bg-white">
                 <div className="font-medium">{p.name} {p.breed ? `• ${p.breed}` : ''}</div>
-                <div className="text-xs text-neutral-500">Owner: {p.owner?.fullName} • {p.owner?.phone}</div>
+                <div className="text-xs text-neutral-500">ID: {p.petId} • Owner: {p.owner?.fullName} • {p.owner?.phone}</div>
                 <div className="text-xs mt-1">{p.hasHistory ? 'Returning' : 'First-time'}</div>
               </div>
             ))
